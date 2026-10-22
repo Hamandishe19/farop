@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#fbf8f3" />
+    <title>You're offline · Farop Clothing</title>
+    <!--
+      Self-contained offline page, precached by /sw.js. It deliberately loads no
+      app JavaScript or CSS so it always works without a connection.
+    -->
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+        padding: 48px 24px; background: #fbf8f3; color: #2b2724; text-align: center;
+        font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      main { max-width: 26rem; }
+      .brand { font: 1.45rem/1 Georgia, ui-serif, serif; letter-spacing: -0.01em; }
+      .brand small { font: 600 0.62rem/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.28em; text-transform: uppercase; color: #56664f; margin-left: 6px; }
+      .icon { width: 56px; height: 56px; margin: 48px auto 0; border-radius: 50%; background: #f4eee4; color: #5a4636; display: flex; align-items: center; justify-content: center; }
+      h1 { font: 1.9rem/1.2 Georgia, ui-serif, serif; margin: 24px 0 0; }
+      p { color: #6f655c; font-size: 0.9rem; margin: 12px 0 0; }
+      .actions { margin-top: 32px; display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+      .btn { display: inline-flex; align-items: center; height: 44px; padding: 0 20px; border-radius: 999px; font: 500 0.875rem ui-sans-serif, system-ui, sans-serif; text-decoration: none; cursor: pointer; }
+      .primary { background: #5a4636; color: #fbf8f3; border: 0; }
+      .primary:hover { background: #46362a; }
+      .secondary { border: 1px solid #e2d8c8; background: rgb(255 255 255 / 0.6); color: #2b2724; }
+      :focus-visible { outline: 2px solid #56664f; outline-offset: 2px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand">Farop<small>Babywear</small></div>
+      <div class="icon" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/><path d="M5 12.86a10 10 0 0 1 5.17-2.69"/><path d="M19 12.86a10 10 0 0 0-2-1.4"/><path d="M2 8.82a15 15 0 0 1 4.18-2.65"/><path d="M22 8.82a15 15 0 0 0-11.29-3.76"/><path d="m2 2 20 20"/></svg>
+      </div>
+      <h1>You're offline</h1>
+      <p>
+        This page isn't available without a connection. Pages you visited recently may still open, but their
+        details may be out of date. Quotation requests need a connection.
+      </p>
+      <div class="actions">
+        <button type="button" class="btn primary" id="retry">Try again</button>
+        <a class="btn secondary" href="/cart">View cart</a>
+      </div>
+    </main>
+    <script>
+      document.getElementById("retry").addEventListener("click", function () {
+        var from = new URLSearchParams(location.search).get("from");
+        // Same-site paths only, so this can't be used as an open redirect.
+        location.assign(from && from.charAt(0) === "/" && from.charAt(1) !== "/" ? from : "/");
+      });
+    </script>
+  </body>
+</html>

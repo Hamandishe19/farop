@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens.
+ * A restrained, warm palette: ivory and cream surfaces, charcoal text,
+ * deep brown for primary actions, muted sage for secondary accents and
+ * dusty pink / mist blue used sparingly.
+ */
+@theme {
+  --color-ivory: #fbf8f3;
+  --color-cream: #f4eee4;
+  --color-beige: #e8ddcd;
+  --color-line: #e2d8c8;
+  --color-charcoal: #2b2724;
+  --color-muted: #6f655c;
+  --color-brown: #5a4636;
+  --color-brown-deep: #46362a;
+  --color-sage: #8a9a82;
+  --color-sage-deep: #56664f;
+  --color-sage-soft: #e3e8de;
+  --color-blush: #d9b8ae;
+  --color-blush-soft: #f3e6e1;
+  --color-mist: #a9b8c2;
+  --color-danger: #9b3b2e;
+
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-heading), ui-serif, Georgia, serif;
+
+  --shadow-soft: 0 1px 2px rgb(43 39 36 / 0.04), 0 8px 24px -12px rgb(43 39 36 / 0.12);
+  --shadow-float: 0 1px 2px rgb(43 39 36 / 0.06), 0 18px 40px -16px rgb(43 39 36 / 0.25);
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  background-color: var(--color-ivory);
+  color: var(--color-charcoal);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background-color: var(--color-blush-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-sage-deep);
+  outline-offset: 2px;
+}
+
+@layer components {
+  /* Subtle glass surface — used selectively (header, menus, floating panels). */
+  .glass {
+    background-color: rgb(251 248 243 / 0.78);
+    border: 1px solid rgb(255 255 255 / 0.6);
+    box-shadow: var(--shadow-float);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass {
+      background-color: rgb(251 248 243 / 0.97);
+    }
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-sage-deep);
+  }
+}
+
+@utility animate-rise {
+  animation: rise 0.28s ease-out both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
