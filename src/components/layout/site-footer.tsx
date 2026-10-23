@@ -17,7 +17,7 @@ async function CopyrightYear() {
 
 export async function SiteFooter() {
   const settings = await getSettings();
-  const hasChannels = Boolean(settings.whatsapp || settings.instagram || settings.facebook);
+  const hasChannels = Boolean(settings.whatsapp || settings.facebook);
 
   return (
     <footer className="mt-24 border-t border-line bg-cream/60">

@@ -16,7 +16,6 @@ export function socialUrl(value: string | undefined, hosts: string[]): string | 
 }
 
 export const FACEBOOK_HOSTS = ["facebook.com", "fb.com"];
-export const INSTAGRAM_HOSTS = ["instagram.com"];
 export const MAX_HOURS_ROWS = 7;
 
 /** Raw form input, kept as typed so the form can be re-shown after an error. */
@@ -26,8 +25,8 @@ export interface SettingsFormValues {
   email: string;
   address: string;
   facebook: string;
-  instagram: string;
   ecocashNumber: string;
+  ecocashFee: string;
   deliveryDays: Weekday[];
   hours: OpeningHours[];
 }
@@ -46,8 +45,8 @@ export function settingsToForm(settings: BusinessSettings): SettingsFormValues {
     email: settings.email ?? "",
     address: settings.address ?? "",
     facebook: settings.facebook ?? "",
-    instagram: settings.instagram ?? "",
     ecocashNumber: settings.ecocashNumber ?? "",
+    ecocashFee: String(settings.ecocashFee),
     deliveryDays: settings.deliveryDays,
     hours: settings.hours,
   };
@@ -62,8 +61,8 @@ export function readSettingsForm(formData: FormData): SettingsFormValues {
     email: str(formData, "email"),
     address: str(formData, "address", 300),
     facebook: str(formData, "facebook", 300),
-    instagram: str(formData, "instagram", 300),
     ecocashNumber: str(formData, "ecocashNumber", 30),
+    ecocashFee: str(formData, "ecocashFee", 10),
     deliveryDays: WEEKDAYS.filter((day) => formData.getAll("deliveryDays").includes(day)),
     hours: days
       .slice(0, MAX_HOURS_ROWS)
@@ -84,10 +83,11 @@ export function validateSettings(values: SettingsFormValues): {
   if (values.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(values.email)) errors.email = "Enter a valid email address.";
   const facebook = socialUrl(values.facebook, FACEBOOK_HOSTS);
   if (values.facebook && !facebook) errors.facebook = "Use your page's full https://facebook.com/… address.";
-  const instagram = socialUrl(values.instagram, INSTAGRAM_HOSTS);
-  if (values.instagram && !instagram) errors.instagram = "Use your profile's full https://instagram.com/… address.";
   if (values.ecocashNumber && !/^[0-9\s]{9,15}$/.test(values.ecocashNumber)) {
     errors.ecocashNumber = "Enter the EcoCash number as customers dial it, e.g. 077 123 4567.";
+  }
+  if (!/^\d{1,3}(\.\d{1,2})?$/.test(values.ecocashFee || "0")) {
+    errors.ecocashFee = "Enter an amount like 1 or 1.50 (0 for no fee).";
   }
   if (values.hours.some((row) => !row.days || !row.time)) {
     errors.hours = "Fill in both the days and the hours on each row, or clear the row.";
@@ -102,8 +102,8 @@ export function validateSettings(values: SettingsFormValues): {
       email: values.email || undefined,
       address: values.address || undefined,
       facebook,
-      instagram,
       ecocashNumber: values.ecocashNumber || undefined,
+      ecocashFee: Math.round(Number(values.ecocashFee || "0") * 100) / 100,
       deliveryDays: values.deliveryDays,
       hours: values.hours,
     },
@@ -116,6 +116,10 @@ export function mergeSettings(defaults: BusinessSettings, stored: Partial<Busine
   return {
     ...defaults,
     ...stored,
+    ecocashFee:
+      typeof stored.ecocashFee === "number" && Number.isFinite(stored.ecocashFee) && stored.ecocashFee >= 0
+        ? stored.ecocashFee
+        : defaults.ecocashFee,
     deliveryDays: Array.isArray(stored.deliveryDays)
       ? WEEKDAYS.filter((day) => stored.deliveryDays?.includes(day))
       : defaults.deliveryDays,

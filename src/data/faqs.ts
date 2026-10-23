@@ -5,7 +5,7 @@
  * settings, so they stay in step with the admin.
  */
 
-import { formatList } from "@/lib/format";
+import { formatList, formatPrice } from "@/lib/format";
 import type { BusinessSettings } from "@/types/settings";
 
 export interface Faq {
@@ -13,8 +13,9 @@ export interface Faq {
   answer: string;
 }
 
-export function buildFaqs(settings: BusinessSettings): Faq[] {
-  const { deliveryDays, ecocashNumber, hours } = settings;
+export function buildFaqs(settings: BusinessSettings, currency: string): Faq[] {
+  const { deliveryDays, ecocashNumber, ecocashFee, hours } = settings;
+  const fee = ecocashFee > 0 ? ` Paying by EcoCash adds a fee of ${formatPrice(ecocashFee, currency)} to your order total.` : "";
   return [
     {
       question: "How do I place an order?",
@@ -28,7 +29,7 @@ export function buildFaqs(settings: BusinessSettings): Faq[] {
     },
     {
       question: "How can I pay?",
-      answer: `You can pay cash on delivery, or by EcoCash${ecocashNumber ? ` to ${ecocashNumber}` : ""}. If you choose EcoCash, please wait until we've confirmed your order and total on WhatsApp, then send the payment and share the EcoCash confirmation message with us.`,
+      answer: `You can pay cash on delivery, or by EcoCash${ecocashNumber ? ` to ${ecocashNumber}` : ""}.${fee} If you choose EcoCash, please wait until we've confirmed your order and total on WhatsApp, then send the payment and share the EcoCash confirmation message with us.`,
     },
     {
       question: "How can I enquire about product availability?",
@@ -61,7 +62,7 @@ export function buildFaqs(settings: BusinessSettings): Faq[] {
     {
       question: "Where can I find the company's social media pages?",
       answer:
-        "Links to our Instagram and Facebook pages are shown on this page and in the website footer.",
+        "Links to our Facebook page and WhatsApp are shown on this page and in the website footer.",
     },
   ].filter(Boolean) as Faq[];
 }

@@ -21,3 +21,10 @@ export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 /** Storage bucket for product photos (created by supabase/schema.sql). */
 export const PRODUCT_IMAGES_BUCKET = "product-images";
+
+/** Public URL of an uploaded photo → its path inside the bucket (undefined if it isn't one of ours). */
+export function storagePath(url: string | null | undefined): string | undefined {
+  const marker = `/storage/v1/object/public/${PRODUCT_IMAGES_BUCKET}/`;
+  const index = url?.indexOf(marker) ?? -1;
+  return url && index >= 0 ? decodeURIComponent(url.slice(index + marker.length)) : undefined;
+}

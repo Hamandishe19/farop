@@ -1,19 +1,36 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus } from "lucide-react";
-import { AdminCard, AdminPageHeader, formatAdminDate } from "@/components/admin/admin-page-header";
+import { connection } from "next/server";
+import { Suspense } from "react";
+import { ArrowRight, Plus } from "lucide-react";
+import { AdminCard, AdminPageFallback, AdminPageHeader, formatAdminDate } from "@/components/admin/admin-page-header";
+import { money } from "@/components/admin/finance-ui";
 import { ImportSamplesButton } from "@/components/admin/import-samples-button";
 import { WhatsAppIcon } from "@/components/icons/social-icons";
 import { buttonClass } from "@/components/ui/button-styles";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
-import { requireAdminPage } from "@/lib/auth/admin";
+import { allows, requireAdminPage } from "@/lib/auth/admin";
 import { roleLabels } from "@/lib/auth/roles";
+import { computeAnalytics, harareToday, monthToDate } from "@/lib/finance/analytics";
 import { listAdminProducts } from "@/services/admin-products";
+import { isFinanceDemo, listExpenses, listSales } from "@/services/finance";
 import { getSettings } from "@/services/settings";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
-export default async function AdminDashboardPage({ searchParams }: PageProps<"/admin/dashboard">) {
+/**
+ * Reads the page address (filters / ids), so it renders inside a loading
+ * boundary as Cache Components requires.
+ */
+export default function AdminDashboardPage(props: PageProps<"/admin/dashboard">) {
+  return (
+    <Suspense fallback={<AdminPageFallback />}>
+      <AdminDashboardPageContent {...props} />
+    </Suspense>
+  );
+}
+
+async function AdminDashboardPageContent({ searchParams }: PageProps<"/admin/dashboard">) {
   const [admin, products, settings, { password }] = await Promise.all([
     requireAdminPage(),
     listAdminProducts(),
@@ -67,6 +84,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
         </p>
       )}
 
+      {allows(admin, "finance.view") && (
+        <Suspense fallback={<div className="mt-6 h-36 animate-pulse rounded-xl bg-white/60" />}>
+          <FinanceSnapshot />
+        </Suspense>
+      )}
+
       <div className="mt-8 grid gap-6 xl:grid-cols-[1.4fr_1fr]">
         <AdminCard className="p-0">
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
@@ -115,5 +138,39 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
         </AdminCard>
       </div>
     </>
+  );
+}
+
+/** This month's headline figures, for admins who may see finances. */
+async function FinanceSnapshot() {
+  await connection();
+  const [sales, expenses] = await Promise.all([listSales(), listExpenses()]);
+  const range = monthToDate(harareToday(new Date()));
+  const report = computeAnalytics({ sales, expenses, products: new Map() }, range);
+  const figures = [
+    { label: "Revenue", value: money(report.revenue) },
+    { label: "Net profit", value: money(report.netProfit) },
+    { label: "Paid orders", value: String(report.orders) },
+    { label: "Still to be paid", value: money(report.outstanding) },
+  ];
+  return (
+    <AdminCard className="mt-6">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-medium">
+          This month{isFinanceDemo && <span className="ml-2 text-xs font-normal text-muted">(sample figures)</span>}
+        </h2>
+        <Link href="/admin/finance" className="inline-flex items-center gap-1 text-xs text-muted hover:text-charcoal">
+          Business analytics <ArrowRight size={12} aria-hidden="true" />
+        </Link>
+      </div>
+      <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {figures.map((figure) => (
+          <div key={figure.label}>
+            <dt className="text-xs text-muted">{figure.label}</dt>
+            <dd className="mt-0.5 text-xl font-semibold text-charcoal">{figure.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </AdminCard>
   );
 }

@@ -46,6 +46,8 @@ export default async function CartPage() {
           orderSettings={{
             whatsapp: settings.whatsapp,
             ecocashNumber: settings.ecocashNumber,
+            ecocashFee: settings.ecocashFee,
+            currency: siteConfig.currency,
             deliveryDays: settings.deliveryDays,
           }}
         />

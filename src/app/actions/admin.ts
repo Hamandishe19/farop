@@ -3,18 +3,20 @@
 import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { demoProducts } from "@/data/demo-products";
-import { refusalMessage, requireAdmin } from "@/lib/auth/admin";
-import { PRODUCT_IMAGES_BUCKET } from "@/lib/supabase/config";
+import { allows, refusalMessage, requireAdmin } from "@/lib/auth/admin";
+import { PRODUCT_IMAGES_BUCKET, storagePath } from "@/lib/supabase/config";
 import { createSessionSupabaseClient } from "@/lib/supabase/server";
 import {
   IMAGE_TYPES,
   readImageFile,
   readProductForm,
+  uniqueSlug,
   validateImageFile,
   validateProduct,
   type ProductFormErrors,
   type ProductFormValues,
 } from "@/lib/validation/product";
+import { parseMoney } from "@/lib/validation/finance";
 import { formToRow, productToRow } from "@/services/product-rows";
 import { PRODUCTS_TAG } from "@/services/products";
 
@@ -36,12 +38,6 @@ export type ProductFormState =
 // Products
 // ---------------------------------------------------------------------------
 
-/** Public URL of an uploaded photo → its path inside the bucket (undefined if it isn't one of ours). */
-function storagePath(url: string | null | undefined): string | undefined {
-  const marker = `/storage/v1/object/public/${PRODUCT_IMAGES_BUCKET}/`;
-  const index = url?.indexOf(marker) ?? -1;
-  return url && index >= 0 ? decodeURIComponent(url.slice(index + marker.length)) : undefined;
-}
 
 export async function saveProduct(_prev: ProductFormState, formData: FormData): Promise<ProductFormState> {
   const id = String(formData.get("id") ?? "").trim() || undefined;
@@ -50,6 +46,10 @@ export async function saveProduct(_prev: ProductFormState, formData: FormData): 
   const errors = validateProduct(values);
   const fileError = file && validateImageFile(file);
   if (fileError) errors.imageSrc = fileError;
+  const costField = formData.get("costPrice");
+  if (typeof costField === "string" && Number.isNaN(parseMoney(costField))) {
+    return { status: "refused", message: "Cost price must be an amount like 4.50, or blank.", values };
+  }
   if (Object.keys(errors).length > 0) return { status: "invalid", errors, values };
 
   const auth = await requireAdmin("products.edit");
@@ -68,20 +68,37 @@ export async function saveProduct(_prev: ProductFormState, formData: FormData): 
     imageUrl = supabase.storage.from(PRODUCT_IMAGES_BUCKET).getPublicUrl(uploadedPath).data.publicUrl;
   }
 
-  const row = formToRow(values, imageUrl);
   const previous = id
-    ? (await supabase.from("products").select("image_url").eq("id", id).maybeSingle()).data
+    ? (await supabase.from("products").select("image_url, slug").eq("id", id).maybeSingle()).data
     : null;
-  const { error } = id
-    ? await supabase.from("products").update(row).eq("id", id)
-    : await supabase.from("products").insert(row);
+  // The web address: kept as it is for an existing product (so shared links keep
+  // working); made from the name for a new one, with -2, -3… if already taken.
+  let slug = previous?.slug as string | undefined;
+  if (!slug) {
+    const { data: similar } = await supabase.from("products").select("slug").like("slug", `${values.slug}%`);
+    slug = uniqueSlug(values.slug, new Set((similar ?? []).map((row) => row.slug as string)));
+  }
+  const row = { ...formToRow(values, imageUrl), slug };
+  const { data: saved, error } = id
+    ? await supabase.from("products").update(row).eq("id", id).select("id").single()
+    : await supabase.from("products").insert(row).select("id").single();
 
   if (error) {
     if (uploadedPath) await supabase.storage.from(PRODUCT_IMAGES_BUCKET).remove([uploadedPath]);
     if (error.code === "23505") {
-      return { status: "invalid", errors: { slug: "Another product already uses this URL slug." }, values };
+      return { status: "refused", message: "Another product with the same name was saved at the same moment. Please save again.", values };
     }
     return { status: "refused", message: `The product could not be saved: ${error.message}`, values };
+  }
+
+  // Cost price lives in its own finance-only table; only saved by admins who may record finances.
+  if (typeof costField === "string" && saved && allows(auth.admin, "finance.edit")) {
+    const cost = parseMoney(costField);
+    if (!Number.isNaN(cost)) {
+      await (costField.trim() === ""
+        ? supabase.from("product_costs").delete().eq("product_id", saved.id)
+        : supabase.from("product_costs").upsert({ product_id: saved.id, cost_price: cost, updated_by: auth.admin.userId }));
+    }
   }
 
   // Replaced or removed photo: tidy up the old file (best effort).

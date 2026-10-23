@@ -15,7 +15,10 @@ import type { CartLine } from "@/types/cart";
 import type { BusinessSettings } from "@/types/settings";
 
 /** The business settings checkout needs (passed from the server). */
-export type OrderSettings = Pick<BusinessSettings, "whatsapp" | "ecocashNumber" | "deliveryDays">;
+export type OrderSettings = Pick<BusinessSettings, "whatsapp" | "ecocashNumber" | "ecocashFee" | "deliveryDays"> & {
+  /** Shop currency, for the EcoCash fee when items have no price yet. */
+  currency: string;
+};
 
 const paymentIcons = { cod: Banknote, ecocash: Smartphone } satisfies Record<PaymentMethod, typeof Banknote>;
 
@@ -51,11 +54,16 @@ export function Checkout({
   const [opened, setOpened] = useState(false);
 
   const totals = calculateTotals(lines);
-  const total = totals.subtotal !== undefined && totals.currency ? formatPrice(totals.subtotal, totals.currency) : undefined;
+  const currency = totals.currency ?? orderSettings.currency;
+  const ecocashFee = orderSettings.ecocashFee;
+  const feeText = formatPrice(ecocashFee, currency);
+  const known = totals.subtotal !== undefined && totals.currency !== undefined;
+  const totalToPay = (withFee: boolean) =>
+    known ? formatPrice(Math.round(((totals.subtotal as number) + (withFee ? ecocashFee : 0)) * 100) / 100, currency) : undefined;
   const message = buildOrderMessage(
     lines,
     { payment: payment || undefined, customerName, deliveryAddress, location, notes },
-    { businessName, ecocashNumber: orderSettings.ecocashNumber },
+    { businessName, ecocashNumber: orderSettings.ecocashNumber, ecocashFee, currency: orderSettings.currency },
   );
   const url = buildWhatsAppUrl(orderSettings.whatsapp, message);
   const { deliveryDays, ecocashNumber } = orderSettings;
@@ -169,6 +177,11 @@ export function Checkout({
                 <span>
                   <span className="block text-sm font-medium text-charcoal">{paymentMethodLabels[method]}</span>
                   <span className="block text-xs text-muted">{paymentHints[method]}</span>
+                  {method === "ecocash" && ecocashFee > 0 && (
+                    <span className="mt-1 inline-block rounded-full bg-blush-soft px-2 py-0.5 text-xs font-medium text-brown">
+                      +{feeText} EcoCash fee
+                    </span>
+                  )}
                 </span>
               </label>
             );
@@ -177,12 +190,29 @@ export function Checkout({
         {err("payment")}
       </fieldset>
 
-      {payment === "ecocash" && ecocashNumber && (
+      {payment === "ecocash" && (
         <div className="rounded-lg bg-sage-soft px-3.5 py-3 text-sm leading-relaxed text-charcoal">
-          <p className="font-medium">EcoCash number: <span className="tabular-nums">{ecocashNumber}</span></p>
+          {ecocashFee > 0 && (
+            <dl className="mb-3 space-y-1 border-b border-sage/40 pb-3">
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">Order total</dt>
+                <dd className="tabular-nums">{totalToPay(false) ?? "Confirmed on WhatsApp"}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">EcoCash fee</dt>
+                <dd className="tabular-nums">+{feeText}</dd>
+              </div>
+              <div className="flex justify-between gap-3 font-semibold">
+                <dt>Total to pay</dt>
+                <dd className="tabular-nums">{totalToPay(true) ?? `Order total + ${feeText}`}</dd>
+              </div>
+            </dl>
+          )}
+          {ecocashNumber && <p className="font-medium">EcoCash number: <span className="tabular-nums">{ecocashNumber}</span></p>}
           <p className="mt-1 text-muted">
-            After we confirm your order on WhatsApp, send {total ?? "the confirmed total"} to this number and share
-            the EcoCash confirmation message with us.
+            {ecocashFee > 0 && <>Paying by EcoCash adds a {feeText} fee to your order. </>}
+            After we confirm your order on WhatsApp, send {totalToPay(true) ?? "the confirmed total"}
+            {ecocashNumber ? " to this number" : ""} and share the EcoCash confirmation message with us.
           </p>
         </div>
       )}

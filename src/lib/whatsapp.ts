@@ -85,7 +85,14 @@ export interface OrderDetails {
 export function buildOrderMessage(
   lines: OrderLine[],
   details: OrderDetails,
-  options: { businessName?: string; ecocashNumber?: string } = {},
+  options: {
+    businessName?: string;
+    ecocashNumber?: string;
+    /** Extra amount for paying by EcoCash; added to the total the customer is told to pay. */
+    ecocashFee?: number;
+    /** Currency for the fee when the items have no prices yet. */
+    currency?: string;
+  } = {},
 ): string {
   const greeting = options.businessName ? `Hello ${options.businessName}!` : "Hello!";
   const out: string[] = [greeting, "I would like to place an order for the following:", ""];
@@ -102,10 +109,17 @@ export function buildOrderMessage(
   });
 
   const totals = calculateTotals(lines);
+  const fee = details.payment === "ecocash" && options.ecocashFee ? options.ecocashFee : 0;
+  const feeCurrency = totals.currency ?? options.currency;
   if (totals.subtotal !== undefined && totals.currency) {
     out.push(`Order total: ${formatPrice(totals.subtotal, totals.currency)}`);
+    if (fee > 0) {
+      out.push(`EcoCash fee: ${formatPrice(fee, totals.currency)}`);
+      out.push(`Total to pay: ${formatPrice(Math.round((totals.subtotal + fee) * 100) / 100, totals.currency)}`);
+    }
   } else {
     out.push("Order total: please confirm");
+    if (fee > 0 && feeCurrency) out.push(`EcoCash fee: ${formatPrice(fee, feeCurrency)} (added to the total)`);
   }
   out.push("");
 

@@ -2,14 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, LayoutDashboard, Package, Settings, Tags, UserRound, Users } from "lucide-react";
+import { Activity, LayoutDashboard, Package, ReceiptText, Settings, Tags, TrendingUp, UserRound, Users, Wallet } from "lucide-react";
 import { can, type AdminRole, type Permission } from "@/lib/auth/roles";
 import { cn } from "@/lib/cn";
 
-const links: Array<{ href: string; label: string; icon: typeof Package; permission?: Permission }> = [
+const links: Array<{ href: string; label: string; icon: typeof Package; permission?: Permission[] | Permission; group?: string }> = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/products", label: "Products", icon: Package },
   { href: "/admin/categories", label: "Categories", icon: Tags },
+  { href: "/admin/finance", label: "Analytics", icon: TrendingUp, permission: "finance.view", group: "Finance" },
+  { href: "/admin/finance/sales", label: "Sales", icon: ReceiptText, permission: ["finance.view", "finance.edit"], group: "Finance" },
+  { href: "/admin/finance/expenses", label: "Expenses", icon: Wallet, permission: ["finance.view", "finance.edit"], group: "Finance" },
   { href: "/admin/team", label: "Team", icon: Users, permission: "team.view" },
   { href: "/admin/settings", label: "Settings", icon: Settings, permission: "settings.view" },
   { href: "/admin/system", label: "System health", icon: Activity, permission: "system.view" },
@@ -17,15 +20,20 @@ const links: Array<{ href: string; label: string; icon: typeof Package; permissi
 ];
 
 /** Admin sections the current role may open. */
-export function AdminNav({ role }: { role: AdminRole }) {
+export function AdminNav({ role, grants }: { role: AdminRole; grants: string[] }) {
   const pathname = usePathname();
   return (
     <nav aria-label="Admin">
       <ul className="-mx-4 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:px-0 lg:flex-col">
         {links
-          .filter((link) => !link.permission || can(role, link.permission))
+          .filter(
+            (link) =>
+              !link.permission ||
+              (Array.isArray(link.permission) ? link.permission : [link.permission]).some((p) => can(role, p, grants)),
+          )
           .map(({ href, label, icon: Icon }) => {
-            const active = pathname === href || pathname.startsWith(`${href}/`);
+            // /admin/finance is a parent of the other finance pages, so it only matches itself.
+            const active = pathname === href || (href !== "/admin/finance" && pathname.startsWith(`${href}/`));
             return (
               <li key={href}>
                 <Link

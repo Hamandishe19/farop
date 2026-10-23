@@ -2,8 +2,8 @@
 
 import { revalidatePath, updateTag } from "next/cache";
 import { cookies } from "next/headers";
-import { isPreviewMode, PREVIEW_ROLE_COOKIE, refusalMessage, requireAdmin } from "@/lib/auth/admin";
-import { canManage, isAdminRole, roleLabels, type AdminRole } from "@/lib/auth/roles";
+import { isPreviewMode, PREVIEW_REGULAR_WITH_FINANCE, PREVIEW_ROLE_COOKIE, refusalMessage, requireAdmin } from "@/lib/auth/admin";
+import { canManage, isAdminRole, isGrantablePermission, roleLabels, type AdminRole } from "@/lib/auth/roles";
 import { createSessionSupabaseClient } from "@/lib/supabase/server";
 import { createServiceSupabaseClient, isTeamManagementConfigured } from "@/lib/supabase/service";
 import {
@@ -12,6 +12,7 @@ import {
   type SettingsFormErrors,
   type SettingsFormValues,
 } from "@/lib/validation/settings";
+import { passwordProblems } from "@/lib/validation/password";
 import { SETTINGS_TAG } from "@/services/settings";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; message: string };
@@ -118,10 +119,53 @@ export async function changeAdminRole(userId: string, newRole: string): Promise<
     return { ok: false, message: `Your role can't make someone a ${roleLabels[newRole].toLowerCase()}.` };
   }
 
-  const { error } = await result.service.from("admin_users").update({ role: newRole }).eq("user_id", userId);
+  const { error } = await result.service.from("admin_users").update({ role: newRole, permissions: [] }).eq("user_id", userId);
   if (error) return { ok: false, message: `Not changed: ${error.message}` };
   revalidatePath("/admin/team");
   return { ok: true, message: `${result.target.name ?? "They"} is now a ${roleLabels[newRole].toLowerCase()}.` };
+}
+
+/** Sets the extra permissions (finance access) of a regular admin. */
+export async function setAdminGrants(userId: string, grants: string[]): Promise<ActionResult> {
+  const result = await manageable(userId);
+  if ("error" in result) return { ok: false, message: result.error ?? "Not allowed." };
+  if (result.target.role !== "regular") {
+    return { ok: false, message: "Supreme and developer admins already have finance access." };
+  }
+  const permissions = [...new Set(grants.filter(isGrantablePermission))];
+  const { error } = await result.service.from("admin_users").update({ permissions }).eq("user_id", userId);
+  if (error) return { ok: false, message: `Not changed: ${error.message}` };
+  revalidatePath("/admin/team");
+  return { ok: true, message: "Access updated." };
+}
+
+/**
+ * Developer admins only: gives another admin a new temporary password when
+ * they've forgotten theirs. Passwords are stored scrambled (hashed), so nobody
+ * can see the old one; the admin must choose their own at next sign-in.
+ */
+export async function resetAdminPassword(userId: string, password: string): Promise<ActionResult> {
+  const problems = passwordProblems(password);
+  if (problems.length > 0) return { ok: false, message: `The temporary password needs: ${problems.join(", ").toLowerCase()}.` };
+
+  const auth = await requireAdmin("team.passwords");
+  if (!auth.ok) return { ok: false, message: refusalMessage(auth.reason) };
+  if (userId === auth.admin.userId) return { ok: false, message: "Change your own password on the My account page." };
+  if (!isTeamManagementConfigured) return { ok: false, message: TEAM_SETUP_MESSAGE };
+
+  const service = createServiceSupabaseClient();
+  const { data: target } = await service.from("admin_users").select("name").eq("user_id", userId).maybeSingle();
+  if (!target) return { ok: false, message: "That admin no longer exists." };
+
+  const { error } = await service.auth.admin.updateUserById(userId, {
+    password,
+    app_metadata: { must_change_password: true },
+  });
+  if (error) return { ok: false, message: `Not changed: ${error.message}` };
+  return {
+    ok: true,
+    message: `New temporary password set for ${target.name ?? "this admin"}. Share it with them privately — they'll choose their own when they sign in.`,
+  };
 }
 
 /** Removes the admin's sign-in account entirely (their admin_users row goes with it). */
@@ -169,6 +213,6 @@ export async function saveSettings(_prev: SettingsFormState, formData: FormData)
 
 /** Switches which role the development preview shows. Does nothing outside the preview. */
 export async function setPreviewRole(role: string): Promise<void> {
-  if (!isPreviewMode || !isAdminRole(role)) return;
+  if (!isPreviewMode || !(isAdminRole(role) || role === PREVIEW_REGULAR_WITH_FINANCE)) return;
   (await cookies()).set(PREVIEW_ROLE_COOKIE, role, { path: "/admin", sameSite: "lax", httpOnly: true });
 }

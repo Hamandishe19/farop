@@ -1,19 +1,35 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { AdminPageFallback, AdminPageHeader } from "@/components/admin/admin-page-header";
 import { ProductForm } from "@/components/admin/product-form";
-import { requireAdminPage } from "@/lib/auth/admin";
+import { allows, requireAdminPage } from "@/lib/auth/admin";
 import { getAdminProduct } from "@/services/admin-products";
 import { getCategories } from "@/services/categories";
+import { getCostPrices } from "@/services/finance";
 
 export const metadata: Metadata = { title: "Edit product" };
 
-export default async function EditProductPage({ params }: PageProps<"/admin/products/[id]/edit">) {
+/**
+ * Reads the page address (filters / ids), so it renders inside a loading
+ * boundary as Cache Components requires.
+ */
+export default function EditProductPage(props: PageProps<"/admin/products/[id]/edit">) {
+  return (
+    <Suspense fallback={<AdminPageFallback />}>
+      <EditProductPageContent {...props} />
+    </Suspense>
+  );
+}
+
+async function EditProductPageContent({ params }: PageProps<"/admin/products/[id]/edit">) {
   const { id } = await params;
-  const [, product, categories] = await Promise.all([
-    requireAdminPage("products.edit"),
+  const admin = await requireAdminPage("products.edit");
+  const canRecordFinance = allows(admin, "finance.edit");
+  const [product, categories, costs] = await Promise.all([
     getAdminProduct(id),
     getCategories(),
+    canRecordFinance ? getCostPrices() : Promise.resolve(undefined),
   ]);
   if (!product) notFound();
 
@@ -23,6 +39,7 @@ export default async function EditProductPage({ params }: PageProps<"/admin/prod
       <ProductForm
         mode="edit"
         productId={product.id}
+        costPrice={costs ? { value: costs.has(product.id) ? String(costs.get(product.id)) : "" } : undefined}
         categories={categories.map(({ slug, name }) => ({ slug, name }))}
         initial={{
           name: product.name,

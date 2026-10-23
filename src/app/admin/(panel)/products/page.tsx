@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { CheckCircle2, PackageOpen, Plus } from "lucide-react";
-import { AdminCard, AdminPageHeader, formatAdminDate } from "@/components/admin/admin-page-header";
+import { AdminCard, AdminPageFallback, AdminPageHeader, formatAdminDate } from "@/components/admin/admin-page-header";
 import { ImportSamplesButton } from "@/components/admin/import-samples-button";
 import { ProductRowActions } from "@/components/admin/product-row-actions";
 import { buttonClass } from "@/components/ui/button-styles";
@@ -39,7 +40,19 @@ function Thumb({ product }: { product: Product }) {
   );
 }
 
-export default async function AdminProductsPage({ searchParams }: PageProps<"/admin/products">) {
+/**
+ * Reads the page address (filters / ids), so it renders inside a loading
+ * boundary as Cache Components requires.
+ */
+export default function AdminProductsPage(props: PageProps<"/admin/products">) {
+  return (
+    <Suspense fallback={<AdminPageFallback />}>
+      <AdminProductsPageContent {...props} />
+    </Suspense>
+  );
+}
+
+async function AdminProductsPageContent({ searchParams }: PageProps<"/admin/products">) {
   const [admin, { saved }, products, categories] = await Promise.all([
     requireAdminPage("products.edit"),
     searchParams,

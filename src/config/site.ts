@@ -7,11 +7,11 @@
  * getSettings() in src/services/settings.ts, which returns the saved values
  * once a database is connected. Anything left undefined is hidden on the site.
  *
- * NEXT_PUBLIC_WHATSAPP_BUSINESS_NUMBER, NEXT_PUBLIC_FACEBOOK_URL and
- * NEXT_PUBLIC_INSTAGRAM_URL override the defaults per deployment.
+ * NEXT_PUBLIC_WHATSAPP_BUSINESS_NUMBER and NEXT_PUBLIC_FACEBOOK_URL override
+ * the defaults per deployment.
  */
 
-import { FACEBOOK_HOSTS, INSTAGRAM_HOSTS, socialUrl } from "@/lib/validation/settings";
+import { FACEBOOK_HOSTS, socialUrl } from "@/lib/validation/settings";
 import { normaliseWhatsAppNumber } from "@/lib/whatsapp";
 import type { BusinessSettings } from "@/types/settings";
 
@@ -26,17 +26,14 @@ const BUSINESS_PHONE = "+263 77 477 3122";
 /** The official Facebook page. */
 const BUSINESS_FACEBOOK_URL = "https://www.facebook.com/profile.php?id=61595037514699";
 
-/** The official Instagram page — awaiting the address from the business owner. */
-const BUSINESS_INSTAGRAM_URL: string | undefined = undefined;
-
 export const defaultSettings: BusinessSettings = {
   whatsapp: normaliseWhatsAppNumber(cleanEnv(process.env.NEXT_PUBLIC_WHATSAPP_BUSINESS_NUMBER) ?? BUSINESS_PHONE),
   phone: BUSINESS_PHONE,
   email: undefined,
   address: undefined,
   facebook: socialUrl(cleanEnv(process.env.NEXT_PUBLIC_FACEBOOK_URL) ?? BUSINESS_FACEBOOK_URL, FACEBOOK_HOSTS),
-  instagram: socialUrl(cleanEnv(process.env.NEXT_PUBLIC_INSTAGRAM_URL) ?? BUSINESS_INSTAGRAM_URL, INSTAGRAM_HOSTS),
   ecocashNumber: "077 477 3122",
+  ecocashFee: 1,
   deliveryDays: ["Thursday", "Saturday"],
   /** One row per group of days. Closed on Sundays. */
   hours: [

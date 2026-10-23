@@ -3,15 +3,18 @@ import { AdminCard, AdminPageHeader, formatAdminDate } from "@/components/admin/
 import { AddAdminForm } from "@/components/admin/add-admin-form";
 import { RoleBadge } from "@/components/admin/role-badge";
 import { TeamMemberActions } from "@/components/admin/team-member-actions";
+import { ResetPasswordControl } from "@/components/admin/reset-password-control";
+import { TeamMemberGrants } from "@/components/admin/team-member-grants";
 import { requireAdminPage } from "@/lib/auth/admin";
-import { ADMIN_ROLES, assignableRoles, canManage, roleDescriptions, roleLabels } from "@/lib/auth/roles";
+import { ADMIN_ROLES, assignableRoles, can, canManage, canSeeAdmin, grantLabels, roleDescriptions, roleLabels } from "@/lib/auth/roles";
 import { listTeam } from "@/services/admin-team";
 
 export const metadata: Metadata = { title: "Team" };
 
 export default async function AdminTeamPage() {
   const admin = await requireAdminPage("team.view");
-  const team = await listTeam();
+  const team = await listTeam(admin.role);
+  const canResetPasswords = can(admin.role, "team.passwords");
   const assignable = assignableRoles(admin.role);
 
   return (
@@ -33,33 +36,48 @@ export default async function AdminTeamPage() {
             const isSelf = member.userId === admin.userId;
             const manageable = !isSelf && canManage(admin.role, member.role);
             return (
-              <li key={member.userId} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-2 font-medium text-charcoal">
-                    {member.name ?? member.email}
-                    {isSelf && <span className="text-xs font-normal text-muted">(you)</span>}
-                    <RoleBadge role={member.role} />
-                  </p>
-                  <p className="mt-0.5 truncate text-xs text-muted">
-                    {member.email} · added {formatAdminDate(member.createdAt)}
-                  </p>
+              <li key={member.userId} className="px-5 py-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="flex flex-wrap items-center gap-2 font-medium text-charcoal">
+                      {member.name ?? member.email}
+                      {isSelf && <span className="text-xs font-normal text-muted">(you)</span>}
+                      <RoleBadge role={member.role} />
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-muted">
+                      {member.email} · added {formatAdminDate(member.createdAt)}
+                    </p>
+                  </div>
+                  {manageable ? (
+                    <TeamMemberActions
+                      userId={member.userId}
+                      name={member.name ?? member.email ?? "this admin"}
+                      role={member.role}
+                      assignable={assignable}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted sm:text-right">
+                      {isSelf
+                        ? "You can't change your own access."
+                        : member.role === "developer"
+                          ? "Developer admins are managed in the database."
+                          : "You can't change this admin's access."}
+                    </p>
+                  )}
                 </div>
-                {manageable ? (
-                  <TeamMemberActions
-                    userId={member.userId}
-                    name={member.name ?? member.email ?? "this admin"}
-                    role={member.role}
-                    assignable={assignable}
-                  />
-                ) : (
-                  <p className="text-xs text-muted sm:text-right">
-                    {isSelf
-                      ? "You can't change your own access."
-                      : member.role === "developer"
-                        ? "Developer admins are managed in the database."
-                        : "Only a developer admin can change this."}
-                  </p>
+                {canResetPasswords && !isSelf && member.role !== "developer" && (
+                  <ResetPasswordControl userId={member.userId} name={member.name ?? member.email ?? "this admin"} />
                 )}
+                {member.role === "regular" &&
+                  (manageable ? (
+                    <TeamMemberGrants userId={member.userId} name={member.name ?? member.email ?? "this admin"} grants={member.grants} />
+                  ) : (
+                    member.grants.length > 0 && (
+                      <p className="mt-2 text-xs text-muted">
+                        Extra access: {member.grants.map((grant) => grantLabels[grant].label).join(", ")}
+                      </p>
+                    )
+                  ))}
               </li>
             );
           })}
@@ -79,7 +97,7 @@ export default async function AdminTeamPage() {
       <AdminCard className="mt-6">
         <h2 className="text-sm font-medium">What each role can do</h2>
         <dl className="mt-3 space-y-3">
-          {ADMIN_ROLES.map((role) => (
+          {ADMIN_ROLES.filter((role) => canSeeAdmin(admin.role, role)).map((role) => (
             <div key={role} className="grid gap-1 text-sm sm:grid-cols-[150px_1fr] sm:gap-4">
               <dt className="font-medium text-charcoal">{roleLabels[role]}</dt>
               <dd className="text-muted">{roleDescriptions[role]}</dd>

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { allowedTypesFor, belongsInCategory, disallowedCategories } from "./product-types.ts";
-import { validateProduct, type ProductFormValues } from "../lib/validation/product.ts";
+import { readProductForm, uniqueSlug, validateProduct, type ProductFormValues } from "../lib/validation/product.ts";
 
 test("girls have no bottoms; boys have bottoms but no dresses", () => {
   assert.ok(!allowedTypesFor("girls").includes("bottoms"));
@@ -62,3 +62,16 @@ test("admin validation requires a condition", () => {
   assert.equal(validateProduct({ ...values, condition: "preloved" }).condition, undefined);
 });
 
+test("product web addresses come from the name and never clash", () => {
+  const form = new FormData();
+  form.append("name", "  Knit Hat & Booties! ");
+  form.append("slug", "ignored-if-sent");
+  assert.equal(readProductForm(form).slug, "knit-hat-booties", "made from the name, not typed");
+  assert.equal(uniqueSlug("knit-hat", new Set()), "knit-hat");
+  assert.equal(uniqueSlug("knit-hat", new Set(["knit-hat", "knit-hat-2"])), "knit-hat-3");
+  const named = new FormData();
+  named.append("name", "!!");
+  const values = readProductForm(named);
+  assert.equal(values.slug, "");
+  assert.equal(validateProduct(values).name, "Use some letters or numbers in the name.");
+});

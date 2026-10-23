@@ -44,7 +44,7 @@ Everyone else is added from the admin area's **Team** page:
 |---|---|
 | Regular admin | Add and edit products, prices and photos; hide or show them |
 | Supreme admin | Everything above, plus delete products, edit business settings, add / change / remove regular admins |
-| Developer admin | Everything, including supreme admins and technical settings. Developer admins are only added with the SQL above and can't be changed or removed from the admin area |
+| Developer admin | Everything, including supreme admins, technical settings and resetting any admin's forgotten password. There is only one, added with the SQL above; it can't be changed or removed from the admin area and is hidden from all other admins |
 
 Nobody can change or remove their own account.
 
@@ -85,6 +85,14 @@ Nobody can change or remove their own account.
 - **Business settings:** stored in `site_settings` and shown across the
   website (contact page, footer, checkout, FAQs). Until something is saved,
   the defaults in `src/config/site.ts` are used.
+- **Finances:** sales (`sales`, `sale_items`), expenses (`expenses`) and
+  product cost prices (`product_costs`, kept out of the public `products`
+  table) are readable only by supreme and developer admins and by regular
+  admins granted "View finances"; only those granted "Record sales &
+  expenses" (or supreme/developer) can change them.
+- **Sold products leave the shop:** recording a sale as paid or awaiting
+  payment deletes its catalogue products (and their photos) in the same step;
+  the sale keeps each item's name, price, cost, category and condition.
 - **Photos:** stored in the public `product-images` bucket (5 MB max, JPG / PNG
   / WebP / AVIF). Replacing or deleting a product's photo removes the old file.
 - **Changes appear on the website immediately** after saving.

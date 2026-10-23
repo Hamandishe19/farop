@@ -249,7 +249,8 @@ async function databaseChecks(): Promise<HealthCheck[]> {
       const developers = data.filter((row) => row.role === "developer").length;
       const supremes = data.filter((row) => row.role === "supreme").length;
       const summary = `${data.length} admins · ${developers} developer · ${supremes} supreme · ${data.length - developers - supremes} regular`;
-      if (developers === 0) return { status: "fail", detail: `${summary}. Nobody can manage supreme admins.`, fix: "Add a developer admin with the SQL in supabase/README.md." };
+      if (developers === 0) return { status: "fail", detail: `${summary}. Nobody can manage supreme admins.`, fix: "Add the developer admin with the SQL in supabase/README.md." };
+      if (developers > 1) return { status: "fail", detail: `${summary}. Only one developer admin is allowed.`, fix: "Change the extra developer's role in the database, then re-run supabase/schema.sql." };
       if (supremes === 0) return { status: "warn", detail: `${summary}. The business owner has no supreme admin account yet.`, fix: "Add one on the Team page." };
       return { status: "ok", detail: summary };
     }),

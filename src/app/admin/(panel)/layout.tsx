@@ -48,8 +48,8 @@ async function AdminShell({ children }: { children: React.ReactNode }) {
               View site <ExternalLink size={12} aria-hidden="true" />
             </Link>
           </div>
-          <AdminNav role={admin.role} />
-          {admin.preview && <PreviewRoleSwitcher role={admin.role} />}
+          <AdminNav role={admin.role} grants={admin.grants} />
+          {admin.preview && <PreviewRoleSwitcher role={admin.role} hasFinanceGrant={admin.grants.length > 0} />}
           <form action={signOut} className="mt-4 border-t border-line pt-4 lg:mt-6">
             <p className="mb-2 truncate px-3 text-xs text-muted">
               Signed in as {admin.preview ? "preview" : (admin.name ?? admin.email)}

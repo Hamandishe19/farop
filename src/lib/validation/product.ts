@@ -19,6 +19,7 @@ export const AVAILABILITY_OPTIONS: Array<{ value: Availability | ""; label: stri
 
 export interface ProductFormValues {
   name: string;
+  /** Made from the name (not typed by admins); the saved product may get a -2, -3… suffix. */
   slug: string;
   shortDescription: string;
   description: string;
@@ -47,6 +48,15 @@ export function slugify(value: string): string {
     .slice(0, 80);
 }
 
+/** `base`, or `base-2`, `base-3`… — the first one not already taken by another product. */
+export function uniqueSlug(base: string, taken: ReadonlySet<string>): string {
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n += 1) {
+    const candidate = `${base.slice(0, 74)}-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
+
 function str(formData: FormData, key: string, max = 500): string {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -55,7 +65,7 @@ function str(formData: FormData, key: string, max = 500): string {
 export function readProductForm(formData: FormData): ProductFormValues {
   return {
     name: str(formData, "name", 120),
-    slug: str(formData, "slug", 80),
+    slug: slugify(str(formData, "name", 120)),
     shortDescription: str(formData, "shortDescription", 240),
     description: str(formData, "description", 4000),
     categories: formData
@@ -79,9 +89,7 @@ export function readProductForm(formData: FormData): ProductFormValues {
 export function validateProduct(values: ProductFormValues): ProductFormErrors {
   const errors: ProductFormErrors = {};
   if (values.name.length < 2) errors.name = "Enter a product name.";
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(values.slug)) {
-    errors.slug = "Use lowercase letters, numbers and hyphens only.";
-  }
+  if (values.name.length >= 2 && !values.slug) errors.name = "Use some letters or numbers in the name.";
   if (values.shortDescription.length < 10) errors.shortDescription = "Add a short description (10+ characters).";
   if (values.categories.length === 0) errors.categories = "Choose at least one category.";
   if (!values.type) {

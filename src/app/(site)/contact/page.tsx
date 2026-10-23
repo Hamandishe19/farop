@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 export default async function ContactPage() {
   const settings = await getSettings();
   const { email, phone, address, hours, deliveryDays } = settings;
-  const faqs = buildFaqs(settings);
+  const faqs = buildFaqs(settings, siteConfig.currency);
   const details = [
     email && { icon: Mail, label: "Email", value: email, href: `mailto:${email}` },
     phone && { icon: Phone, label: "Phone", value: phone, href: `tel:${phone.replace(/[^+\d]/g, "")}` },
@@ -45,7 +45,7 @@ export default async function ContactPage() {
     });
   }
   const whatsappUrl = whatsAppChatUrl(settings.whatsapp);
-  const hasSocial = Boolean(settings.instagram || settings.facebook || settings.whatsapp);
+  const hasSocial = Boolean(settings.facebook || settings.whatsapp);
 
   return (
     <>
@@ -81,7 +81,7 @@ export default async function ContactPage() {
               <SocialLinks settings={settings} variant="list" className="mt-6" />
             ) : (
               <p className="mt-4 rounded-lg bg-cream px-4 py-3.5 text-sm leading-relaxed text-muted">
-                Our WhatsApp, Instagram and Facebook details are being finalised and will appear here soon.
+                Our WhatsApp and Facebook details are being finalised and will appear here soon.
               </p>
             )}
 

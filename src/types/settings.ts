@@ -21,9 +21,10 @@ export interface BusinessSettings {
   email?: string;
   address?: string;
   facebook?: string;
-  instagram?: string;
   /** EcoCash number as customers should dial it. */
   ecocashNumber?: string;
+  /** Extra amount added to an order paid by EcoCash (0 = no fee). */
+  ecocashFee: number;
   deliveryDays: Weekday[];
   hours: OpeningHours[];
 }

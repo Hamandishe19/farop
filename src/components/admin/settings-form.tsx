@@ -74,7 +74,6 @@ export function SettingsForm({ initial }: { initial: SettingsFormValues }) {
           {field("email", "Email", { type: "email" })}
           {field("address", "Address")}
           {field("facebook", "Facebook page", { type: "url", placeholder: "https://www.facebook.com/…" })}
-          {field("instagram", "Instagram profile", { type: "url", placeholder: "https://www.instagram.com/…" })}
         </div>
         <p className="mt-3 text-xs text-muted">Leave a field empty to hide it on the website.</p>
       </section>
@@ -83,6 +82,7 @@ export function SettingsForm({ initial }: { initial: SettingsFormValues }) {
         <h2 className="mb-4 text-sm font-medium">Orders &amp; delivery</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           {field("ecocashNumber", "EcoCash number", { inputMode: "tel", placeholder: "077 123 4567" })}
+          {field("ecocashFee", "EcoCash fee added to orders", { inputMode: "decimal", placeholder: "1.00" })}
         </div>
 
         <fieldset className="mt-5">

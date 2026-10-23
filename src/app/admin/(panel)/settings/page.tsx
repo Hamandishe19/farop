@@ -5,7 +5,8 @@ import { SettingsForm } from "@/components/admin/settings-form";
 import { PAYMENT_METHODS, paymentMethodLabels } from "@/config/payments";
 import { requireAdminPage } from "@/lib/auth/admin";
 import { can } from "@/lib/auth/roles";
-import { formatList } from "@/lib/format";
+import { formatList, formatPrice } from "@/lib/format";
+import { siteConfig } from "@/config/site";
 import { settingsToForm } from "@/lib/validation/settings";
 import { getSettings } from "@/services/settings";
 
@@ -48,7 +49,6 @@ export default async function AdminSettingsPage() {
                 <Row label="Email" value={settings.email} />
                 <Row label="Address" value={settings.address} />
                 <Row label="Facebook" value={settings.facebook} />
-                <Row label="Instagram" value={settings.instagram} />
               </dl>
             </AdminCard>
             <AdminCard>
@@ -56,6 +56,7 @@ export default async function AdminSettingsPage() {
               <dl className="mt-2 divide-y divide-line">
                 <Row label="Payment methods" value={PAYMENT_METHODS.map((method) => paymentMethodLabels[method]).join(", ")} />
                 <Row label="EcoCash number" value={settings.ecocashNumber} />
+                <Row label="EcoCash fee added to orders" value={formatPrice(settings.ecocashFee, siteConfig.currency)} />
                 <Row label="Delivery days" value={formatList(settings.deliveryDays)} />
                 <Row label="Working hours" value={settings.hours.map((row) => `${row.days}: ${row.time}`).join(" · ")} />
               </dl>

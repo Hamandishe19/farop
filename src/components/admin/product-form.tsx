@@ -6,7 +6,7 @@ import { AlertTriangle } from "lucide-react";
 import { saveProduct, type ProductFormState } from "@/app/actions/admin";
 import { buttonClass } from "@/components/ui/button-styles";
 import { cn } from "@/lib/cn";
-import { AVAILABILITY_OPTIONS, slugify, type ProductFormValues } from "@/lib/validation/product";
+import { AVAILABILITY_OPTIONS, type ProductFormValues } from "@/lib/validation/product";
 import { productTypeLabels } from "@/config/product-types";
 import { conditionLabels } from "@/lib/product-display";
 import { PRODUCT_CONDITIONS, PRODUCT_TYPES, type CategorySlug } from "@/types/product";
@@ -16,18 +16,19 @@ export function ProductForm({
   categories,
   mode,
   productId,
+  costPrice,
 }: {
   initial: ProductFormValues;
   categories: Array<{ slug: CategorySlug; name: string }>;
   mode: "create" | "edit";
   /** Set when editing an existing product. */
   productId?: string;
+  /** Shown only to admins who may record finances; undefined = field hidden. */
+  costPrice?: { value: string };
 }) {
   const [state, action, pending] = useActionState<ProductFormState, FormData>(saveProduct, { status: "idle" });
   const values = "values" in state ? state.values : initial;
   const errors = state.status === "invalid" ? state.errors : {};
-  const [slug, setSlug] = useState(initial.slug);
-  const [slugEdited, setSlugEdited] = useState(mode === "edit");
   const [newPhoto, setNewPhoto] = useState<string>();
   const [removePhoto, setRemovePhoto] = useState(false);
   // React clears the file input after each submit, so drop the preview of a photo that is no longer chosen.
@@ -74,32 +75,15 @@ export function ProductForm({
       <section className="rounded-xl border border-line bg-white p-5 sm:p-6">
         <h2 className="mb-4 text-sm font-medium">Details</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div>
+          <div className="sm:col-span-2">
             <label htmlFor="name" className="mb-1.5 block text-sm">Name</label>
-            <input
-              id="name"
-              name="name"
-              defaultValue={values.name}
-              onChange={(event) => !slugEdited && setSlug(slugify(event.target.value))}
-              className={input(errors.name)}
-              {...a11y("name")}
-            />
+            <input id="name" name="name" defaultValue={values.name} className={input(errors.name)} {...a11y("name")} />
             {err("name")}
-          </div>
-          <div>
-            <label htmlFor="slug" className="mb-1.5 block text-sm">URL slug</label>
-            <input
-              id="slug"
-              name="slug"
-              value={slug}
-              onChange={(event) => {
-                setSlugEdited(true);
-                setSlug(event.target.value);
-              }}
-              className={input(errors.slug)}
-              {...a11y("slug")}
-            />
-            {err("slug")}
+            <p className="mt-1 text-xs text-muted">
+              {mode === "edit"
+                ? "The product's web address stays the same if you rename it, so shared links keep working."
+                : "The product's web address is made from its name automatically."}
+            </p>
           </div>
           <div className="sm:col-span-2">
             <label htmlFor="shortDescription" className="mb-1.5 block text-sm">Short description</label>
@@ -167,6 +151,15 @@ export function ProductForm({
             <input id="currency" name="currency" maxLength={3} placeholder="e.g. USD" defaultValue={values.currency} className={input(errors.currency)} {...a11y("currency")} />
             {err("currency")}
           </div>
+          {costPrice && (
+            <div>
+              <label htmlFor="costPrice" className="mb-1.5 block text-sm">
+                Cost price <span className="text-muted">(private)</span>
+              </label>
+              <input id="costPrice" name="costPrice" inputMode="decimal" placeholder="What you paid per item" defaultValue={costPrice.value} className={input()} />
+              <p className="mt-1 text-xs text-muted">Never shown on the website. Used for profit figures.</p>
+            </div>
+          )}
           <div>
             <label htmlFor="availability" className="mb-1.5 block text-sm">Availability</label>
             <select id="availability" name="availability" defaultValue={values.availability} className={input(errors.availability)}>

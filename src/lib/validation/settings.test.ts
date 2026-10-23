@@ -14,6 +14,7 @@ test("settings form is read, cleaned and validated", () => {
     form([
       ["whatsapp", "+263 77 477 3122"],
       ["ecocashNumber", "077 477 3122"],
+      ["ecocashFee", "1.5"],
       ["facebook", "https://www.facebook.com/profile.php?id=1"],
       ["deliveryDays", "Saturday"],
       ["deliveryDays", "Thursday"],
@@ -29,6 +30,7 @@ test("settings form is read, cleaned and validated", () => {
   const { settings, errors } = validateSettings(values);
   assert.deepEqual(errors, {});
   assert.equal(settings?.whatsapp, "263774773122");
+  assert.equal(settings?.ecocashFee, 1.5);
   assert.equal(settings?.email, undefined, "empty fields are hidden, not empty strings");
 });
 
@@ -39,17 +41,18 @@ test("invalid settings are rejected field by field", () => {
       ["email", "not-an-email"],
       ["facebook", "https://example.com/page"],
       ["ecocashNumber", "abc"],
+      ["ecocashFee", "-1"],
       ["hoursDays", "Monday"],
       ["hoursTime", ""],
     ]),
   );
   const { settings, errors } = validateSettings(values);
   assert.equal(settings, undefined);
-  assert.ok(errors.whatsapp && errors.email && errors.facebook && errors.ecocashNumber && errors.hours);
+  assert.ok(errors.whatsapp && errors.email && errors.facebook && errors.ecocashNumber && errors.ecocashFee && errors.hours);
 });
 
 test("saved settings are laid over the defaults", () => {
-  const defaults: BusinessSettings = { phone: "1", ecocashNumber: "2", deliveryDays: ["Thursday"], hours: [] };
+  const defaults: BusinessSettings = { phone: "1", ecocashNumber: "2", ecocashFee: 1, deliveryDays: ["Thursday"], hours: [] };
   assert.equal(mergeSettings(defaults, null), defaults);
   const merged = mergeSettings(defaults, { phone: "9", deliveryDays: ["Sunday", "Bogus" as never] });
   assert.equal(merged.phone, "9");

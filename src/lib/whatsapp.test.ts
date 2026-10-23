@@ -100,3 +100,15 @@ test("product enquiry includes only supplied details", () => {
   assert.match(full, /Size: 0-3 months/);
   assert.match(full, /Link: https:\/\/example\.com\/products\/knit-hat/);
 });
+
+test("EcoCash orders show the fee and the total to pay", () => {
+  const lines = [{ name: "Knit Hat", quantity: 2, unitPrice: 8, currency: "USD" }];
+  const message = buildOrderMessage(lines, { ...cod, payment: "ecocash" }, { ecocashFee: 1 });
+  assert.match(message, /Order total: \$16\.00\nEcoCash fee: \$1\.00\nTotal to pay: \$17\.00/);
+
+  assert.doesNotMatch(buildOrderMessage(lines, cod, { ecocashFee: 1 }), /EcoCash fee/, "no fee for cash on delivery");
+  assert.match(
+    buildOrderMessage([{ name: "Hat", quantity: 1 }], { ...cod, payment: "ecocash" }, { ecocashFee: 1, currency: "USD" }),
+    /Order total: please confirm\nEcoCash fee: \$1\.00 \(added to the total\)/,
+  );
+});

@@ -13,11 +13,23 @@ export function AdminPageHeader({ title, description, action }: { title: string;
 }
 
 export function AdminCard({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-xl border border-line bg-white p-5 shadow-[var(--shadow-soft)] ${className}`}>{children}</div>;
+  // Default padding unless the caller sets its own (e.g. p-0 for edge-to-edge tables).
+  const padding = /(^|\s)p-\d/.test(className) ? "" : "p-5";
+  return <div className={`rounded-xl border border-line bg-white shadow-[var(--shadow-soft)] ${padding} ${className}`}>{children}</div>;
 }
 
 export function formatAdminDate(iso: string): string {
   return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(
     new Date(iso),
+  );
+}
+
+/** Placeholder while an admin page reads its address (filters, ids) and loads its data. */
+export function AdminPageFallback() {
+  return (
+    <div aria-busy="true" aria-label="Loading" className="space-y-6">
+      <div className="h-12 w-64 animate-pulse rounded-lg bg-white/60" />
+      <div className="h-[60vh] animate-pulse rounded-xl bg-white/60" />
+    </div>
   );
 }
