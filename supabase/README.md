@@ -9,34 +9,34 @@ the admin area can't sign in. Supabase's free plan is enough.
 2. Choose a name (e.g. `farop-clothing`), a strong database password, and the
    region closest to Zimbabwe (e.g. *South Africa* / *Europe West*).
 
-## 2. Create the tables, security rules and photo storage
+## 2. Create your developer admin account
 
-1. In the project, open **SQL Editor → New query**.
-2. Paste the whole of [`schema.sql`](./schema.sql) and click **Run**.
-   It is safe to run again later.
+**Authentication → Users → Add user → Create new user**: your email and a
+strong password, with **Auto confirm user** ticked.
 
-## 3. Create the first (developer) admin
+## 3. Run the setup script (one go)
 
-1. Open **Authentication → Users → Add user → Create new user**.
-   Enter your email and a strong password, and tick **Auto confirm user**.
-2. Back in **SQL Editor**, run (with that email and your name):
+1. Open [`schema.sql`](./schema.sql) and change the two lines near the top to
+   your email (the one from step 2) and your name.
+2. In Supabase: **SQL Editor → New query**, paste the whole file, click **Run**.
 
-   ```sql
-   insert into public.admin_users (user_id, email, name, role)
-   select id, email, 'Your name', 'developer' from auth.users where email = 'you@example.com'
-   on conflict (user_id) do update set role = excluded.role;
-   ```
+It creates every table, security rule, function and the photo bucket, and
+makes your account the developer admin. The results show
+`Done: … is the developer admin` — or a message saying what to fix. It's safe
+to run again at any time.
 
-3. Recommended: **Authentication → Providers → Email** → turn off
-   **Allow new users to sign up**, so nobody can create their own account.
-4. For "Forgot password?" emails: **Authentication → URL Configuration** →
-   set **Site URL** to the live address (e.g. `https://faropclothing.com`) and
-   add these **Redirect URLs**:
-   - `https://faropclothing.com/admin/auth/callback`
-   - `http://localhost:3000/admin/auth/callback` (for local development)
+Recommended afterwards: **Authentication → Providers → Email** → turn off
+**Allow new users to sign up**, so nobody can create their own account.
 
-   The free plan sends only a few auth emails per hour; for real use, set up
-   your own email sender under **Authentication → Emails → SMTP Settings**.
+For "Forgot password?" emails: **Authentication → URL Configuration** → set
+**Site URL** to the live address (e.g. `https://faropclothing.com`) and add
+these **Redirect URLs**:
+
+- `https://faropclothing.com/admin/auth/callback`
+- `http://localhost:3000/admin/auth/callback` (for local development)
+
+The free plan sends only a few auth emails per hour; for real use, set up your
+own email sender under **Authentication → Emails → SMTP Settings**.
 
 Everyone else is added from the admin area's **Team** page:
 
@@ -44,7 +44,7 @@ Everyone else is added from the admin area's **Team** page:
 |---|---|
 | Regular admin | Add and edit products, prices and photos; hide or show them |
 | Supreme admin | Everything above, plus delete products, edit business settings, add / change / remove regular admins |
-| Developer admin | Everything, including supreme admins, technical settings and resetting any admin's forgotten password. There is only one, added with the SQL above; it can't be changed or removed from the admin area and is hidden from all other admins |
+| Developer admin | Everything, including supreme admins, technical settings and resetting any admin's forgotten password. There is only one (set by the setup script); it can't be changed or removed from the admin area and is hidden from all other admins |
 
 Nobody can change or remove their own account.
 
