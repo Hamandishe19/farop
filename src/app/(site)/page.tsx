@@ -4,6 +4,7 @@ import { ArrowRight, MessageCircle, ShoppingBag, Shirt } from "lucide-react";
 import { Container, SectionHeading } from "@/components/layout/container";
 import { CataloguePreviews } from "@/components/product/catalogue-previews";
 import { DemoNotice } from "@/components/product/demo-notice";
+import { EmptyCatalogue } from "@/components/product/product-grid";
 import { ProductImage } from "@/components/product/product-image";
 import { buttonClass } from "@/components/ui/button-styles";
 import { images } from "@/config/images";
@@ -124,10 +125,16 @@ export default async function HomePage() {
             title="Explore each catalogue"
             description="A first look at every collection. Open a catalogue to see all of its pieces."
           />
-          <div className="mb-10">
-            <DemoNotice />
-          </div>
-          <CataloguePreviews categories={categories} products={products} />
+          {products.length === 0 ? (
+            <EmptyCatalogue message="Our first pieces are being added. Browse the collections, or contact us to ask about something specific." />
+          ) : (
+            <>
+              <div className="mb-10">
+                <DemoNotice />
+              </div>
+              <CataloguePreviews categories={categories} products={products} />
+            </>
+          )}
         </Container>
       </section>
 

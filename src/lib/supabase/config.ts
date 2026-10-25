@@ -14,7 +14,23 @@
  *    (server-only), for adding and removing admin accounts.
  */
 
-export const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || undefined;
+/**
+ * The project's base address only. Supabase's dashboard also shows longer
+ * addresses (…/rest/v1/); pasting one of those would break every request,
+ * so anything after the host is dropped.
+ */
+export function normaliseSupabaseUrl(value: string | undefined): string | undefined {
+  const raw = value?.trim().replace(/^["']|["']$/g, "");
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" || url.hostname === "localhost" || url.hostname === "127.0.0.1" ? url.origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export const supabaseUrl = normaliseSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
 export const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || undefined;
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);

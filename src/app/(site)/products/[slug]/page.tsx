@@ -14,6 +14,10 @@ import { getSettings } from "@/services/settings";
 
 export async function generateStaticParams() {
   const products = await getActiveProducts();
+  // Cache Components needs at least one entry. With no products yet (a new
+  // shop), a placeholder lets the build check the page; it renders "not found".
+  // Products added later are rendered on first visit.
+  if (products.length === 0) return [{ slug: "__placeholder__" }];
   return products.map((product) => ({ slug: product.slug }));
 }
 
