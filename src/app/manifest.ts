@@ -14,6 +14,8 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: siteConfig.theme.background,
     theme_color: siteConfig.theme.themeColor,
     categories: ["shopping", "lifestyle"],
+    // Lets the site detect (via getInstalledRelatedApps) that it is already installed.
+    related_applications: [{ platform: "webapp", url: "/manifest.webmanifest" }],
     // Placeholder monogram icons — replace with the official logo when supplied.
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },

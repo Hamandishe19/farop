@@ -42,6 +42,9 @@ export function ManualInstallSteps({ platform }: { platform: InstallPlatform }) 
           In Chrome or Edge, look for the install icon at the right of the address bar, or open the browser
           menu and choose <strong className="font-medium">Install</strong>.
         </p>
+        <p>
+          In Safari on a Mac, choose <strong className="font-medium">File › Add to Dock</strong>.
+        </p>
         <p className="text-muted">
           Some browsers do not support installing websites. You can bookmark this page instead.
         </p>

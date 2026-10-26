@@ -30,10 +30,34 @@ export function detectPlatform(): InstallPlatform {
   return "unknown";
 }
 
-/** On iOS, Add to Home Screen is reliably available from Safari's Share menu. */
-export function isIOSSafari(): boolean {
-  if (detectPlatform() !== "ios") return false;
-  return !/CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(navigator.userAgent);
+/** Chromium browsers fire `beforeinstallprompt` when the site is installable. */
+export function supportsNativePrompt(): boolean {
+  return typeof window !== "undefined" && "onbeforeinstallprompt" in window;
+}
+
+/** Desktop Firefox has no way to install a website, so there is nothing to suggest. */
+export function canInstallManually(): boolean {
+  return !(detectPlatform() === "desktop" && /Firefox\//.test(navigator.userAgent));
+}
+
+type RelatedAppsNavigator = Navigator & {
+  getInstalledRelatedApps?: () => Promise<{ platform: string; url?: string; id?: string }[]>;
+};
+
+/**
+ * Whether this PWA is already installed on the device, as reported by Chromium's
+ * `getInstalledRelatedApps` (relies on the manifest's `related_applications`).
+ * Resolves "unknown" where the API is missing or fails.
+ */
+export async function checkInstalledRelatedApp(): Promise<"installed" | "not-installed" | "unknown"> {
+  const nav = navigator as RelatedAppsNavigator;
+  if (typeof nav.getInstalledRelatedApps !== "function") return "unknown";
+  try {
+    const apps = await nav.getInstalledRelatedApps();
+    return apps.some((app) => app.platform === "webapp") ? "installed" : "not-installed";
+  } catch {
+    return "unknown";
+  }
 }
 
 const DISMISSED_KEY = "farop.install.dismissedAt";

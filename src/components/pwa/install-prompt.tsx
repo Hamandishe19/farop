@@ -4,33 +4,47 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { IOSInstallSteps } from "@/components/pwa/install-steps";
+import { ManualInstallSteps } from "@/components/pwa/install-steps";
 import { buttonClass } from "@/components/ui/button-styles";
 import { useInstall } from "@/hooks/use-install";
-import { isIOSSafari, isStandalone, rememberDismissal, wasInstalledHere, wasRecentlyDismissed } from "@/lib/pwa";
+import {
+  canInstallManually,
+  checkInstalledRelatedApp,
+  detectPlatform,
+  isStandalone,
+  rememberDismissal,
+  rememberInstalled,
+  supportsNativePrompt,
+  wasInstalledHere,
+  wasRecentlyDismissed,
+  type InstallPlatform,
+} from "@/lib/pwa";
 import { toastStore } from "@/store/toast-store";
 
-/** Visitors browse for a while before we suggest installing. */
-const ENGAGEMENT_DELAY_MS = 25_000;
+/** Visitors browse briefly before we suggest installing. */
+const ENGAGEMENT_DELAY_MS = 8_000;
 /** Pages where a floating panel could get in the way of the main task. */
 const SUPPRESSED_PATHS = ["/cart", "/contact"];
 
-type Mode = "native" | "ios";
+type Mode = "native" | "manual";
 
 /**
- * Small, dismissible install suggestion.
+ * Small, dismissible install suggestion, never shown inside the installed app.
  *
- * - Chromium browsers: shown only after the browser offers `beforeinstallprompt`;
- *   "Install App" opens the browser's own install dialog.
- * - iOS Safari: there is no native prompt, so we show Add to Home Screen steps.
- * - Everything else: nothing is shown (no non-functional install button). The
- *   footer's "Install the app" link offers general guidance instead.
+ * - Chromium browsers: once the browser offers `beforeinstallprompt`, "Install App"
+ *   opens its own install dialog. If it never does, manual steps are offered only
+ *   when `getInstalledRelatedApps` confirms the app is not already installed
+ *   (Chromium withholds the event for installed apps).
+ * - Safari (iOS and Mac), Firefox on Android and others: no native prompt, so we
+ *   show platform-specific Add to Home Screen / Add to Dock steps.
+ * - Desktop Firefox: nothing is shown, as it cannot install websites.
  */
 export function InstallPrompt() {
   const pathname = usePathname();
   const { canPromptNatively, installed, promptInstall } = useInstall();
   const [eligible, setEligible] = useState(false);
-  const [iosEligible, setIosEligible] = useState(false);
+  const [manualEligible, setManualEligible] = useState(false);
+  const [platform, setPlatform] = useState<InstallPlatform>("unknown");
   const [dismissed, setDismissed] = useState(false);
   const [showSteps, setShowSteps] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -38,14 +52,31 @@ export function InstallPrompt() {
   // Decide eligibility once on the client, after an engagement delay.
   useEffect(() => {
     if (isStandalone() || wasInstalledHere() || wasRecentlyDismissed()) return;
-    const timer = window.setTimeout(() => {
-      setEligible(true);
-      setIosEligible(isIOSSafari());
-    }, ENGAGEMENT_DELAY_MS);
-    return () => window.clearTimeout(timer);
+    let cancelled = false;
+    let timer: number | undefined;
+
+    checkInstalledRelatedApp().then((related) => {
+      if (cancelled) return;
+      if (related === "installed") {
+        rememberInstalled();
+        return;
+      }
+      timer = window.setTimeout(() => {
+        setEligible(true);
+        setPlatform(detectPlatform());
+        // Chromium without its own prompt may mean "already installed"; only fall
+        // back to manual steps when that has been ruled out.
+        setManualEligible(canInstallManually() && (!supportsNativePrompt() || related === "not-installed"));
+      }, ENGAGEMENT_DELAY_MS);
+    });
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, []);
 
-  const mode: Mode | null = canPromptNatively ? "native" : iosEligible ? "ios" : null;
+  const mode: Mode | null = canPromptNatively ? "native" : manualEligible ? "manual" : null;
   const visible =
     eligible && !dismissed && !installed && mode !== null && !SUPPRESSED_PATHS.includes(pathname);
 
@@ -101,10 +132,12 @@ export function InstallPrompt() {
         </div>
       </div>
 
-      {mode === "ios" && showSteps && (
+      {mode === "manual" && showSteps && (
         <div className="mt-4 rounded-lg bg-white/70 p-3.5">
-          <p className="mb-2.5 text-sm font-medium text-charcoal">Add this website to your Home Screen:</p>
-          <IOSInstallSteps />
+          <p className="mb-2.5 text-sm font-medium text-charcoal">
+            {platform === "desktop" ? "Install this website as an app:" : "Add this website to your Home Screen:"}
+          </p>
+          <ManualInstallSteps platform={platform} />
         </div>
       )}
 
@@ -125,7 +158,7 @@ export function InstallPrompt() {
           )
         )}
         <button type="button" onClick={notNow} className={buttonClass({ variant: "secondary", size: "sm", className: "flex-1" })}>
-          {mode === "ios" && showSteps ? "Done" : "Not Now"}
+          {mode === "manual" && showSteps ? "Done" : "Not Now"}
         </button>
       </div>
     </aside>
