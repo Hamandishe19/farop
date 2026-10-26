@@ -142,23 +142,19 @@ export function InstallPrompt() {
       )}
 
       <div className="mt-4 flex gap-2">
-        {mode === "native" ? (
-          <button type="button" onClick={install} disabled={busy} className={buttonClass({ size: "sm", className: "flex-1" })}>
+        {/* Only Chromium lets a site install itself; elsewhere "Install App" reveals the browser's steps. */}
+        {!(mode === "manual" && showSteps) && (
+          <button
+            type="button"
+            onClick={mode === "native" ? install : () => setShowSteps(true)}
+            disabled={busy}
+            className={buttonClass({ size: "sm", className: "flex-1" })}
+          >
             {busy ? "Opening…" : "Install App"}
           </button>
-        ) : (
-          !showSteps && (
-            <button
-              type="button"
-              onClick={() => setShowSteps(true)}
-              className={buttonClass({ size: "sm", className: "flex-1" })}
-            >
-              Show Me How
-            </button>
-          )
         )}
         <button type="button" onClick={notNow} className={buttonClass({ variant: "secondary", size: "sm", className: "flex-1" })}>
-          {mode === "manual" && showSteps ? "Done" : "Not Now"}
+          {mode === "manual" && showSteps ? "Done" : "Ignore"}
         </button>
       </div>
     </aside>
