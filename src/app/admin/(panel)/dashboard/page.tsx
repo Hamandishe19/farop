@@ -5,7 +5,6 @@ import { Suspense } from "react";
 import { ArrowRight, Plus } from "lucide-react";
 import { AdminCard, AdminPageFallback, AdminPageHeader, formatAdminDate } from "@/components/admin/admin-page-header";
 import { money } from "@/components/admin/finance-ui";
-import { ImportSamplesButton } from "@/components/admin/import-samples-button";
 import { WhatsAppIcon } from "@/components/icons/social-icons";
 import { buttonClass } from "@/components/ui/button-styles";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
@@ -101,7 +100,6 @@ async function AdminDashboardPageContent({ searchParams }: PageProps<"/admin/das
           {recent.length === 0 ? (
             <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
               <p className="text-sm text-muted">No products yet.</p>
-              {isSupabaseConfigured && <ImportSamplesButton />}
             </div>
           ) : (
             <ul className="divide-y divide-line">

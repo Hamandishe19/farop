@@ -4,13 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { CheckCircle2, PackageOpen, Plus } from "lucide-react";
 import { AdminCard, AdminPageFallback, AdminPageHeader, formatAdminDate } from "@/components/admin/admin-page-header";
-import { ImportSamplesButton } from "@/components/admin/import-samples-button";
 import { ProductRowActions } from "@/components/admin/product-row-actions";
 import { buttonClass } from "@/components/ui/button-styles";
 import { productTypeLabels } from "@/config/product-types";
 import { requireAdminPage } from "@/lib/auth/admin";
 import { can } from "@/lib/auth/roles";
-import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { conditionLabels, displayPrice } from "@/lib/product-display";
 import { listAdminProducts } from "@/services/admin-products";
 import { getCategories } from "@/services/categories";
@@ -90,14 +88,13 @@ async function AdminProductsPageContent({ searchParams }: PageProps<"/admin/prod
           <PackageOpen size={32} strokeWidth={1.3} aria-hidden="true" className="text-sage" />
           <h2 className="mt-3 font-display text-2xl text-charcoal">No products yet</h2>
           <p className="mt-1 max-w-sm text-sm text-muted">
-            Add your first product, or start from the sample products and edit them into your own.
+            Add your first product to start building the catalogue.
           </p>
           <div className="mt-6 flex flex-col items-center gap-3">
             <Link href="/admin/products/new" className={buttonClass({ size: "sm" })}>
               <Plus size={15} aria-hidden="true" />
               New product
             </Link>
-            {isSupabaseConfigured && <ImportSamplesButton />}
           </div>
         </AdminCard>
       ) : (

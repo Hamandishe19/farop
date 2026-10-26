@@ -2,7 +2,6 @@
 
 import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
-import { demoProducts } from "@/data/demo-products";
 import { allows, refusalMessage, requireAdmin } from "@/lib/auth/admin";
 import { PRODUCT_IMAGES_BUCKET, storagePath } from "@/lib/supabase/config";
 import { createSessionSupabaseClient } from "@/lib/supabase/server";
@@ -17,7 +16,7 @@ import {
   type ProductFormValues,
 } from "@/lib/validation/product";
 import { parseMoney } from "@/lib/validation/finance";
-import { formToRow, productToRow } from "@/services/product-rows";
+import { formToRow } from "@/services/product-rows";
 import { PRODUCTS_TAG } from "@/services/products";
 
 /**
@@ -137,19 +136,4 @@ export async function deleteProduct(productId: string): Promise<AdminActionResul
 
   updateTag(PRODUCTS_TAG);
   return { ok: true, message: "Deleted." };
-}
-
-/** Copies the built-in sample products into an empty database so there is something to edit. */
-export async function importSampleProducts(): Promise<AdminActionResult> {
-  const auth = await requireAdmin("products.edit");
-  if (!auth.ok) return { ok: false, message: refusalMessage(auth.reason) };
-
-  const supabase = await createSessionSupabaseClient();
-  const { error } = await supabase
-    .from("products")
-    .upsert(demoProducts.map(productToRow), { onConflict: "slug", ignoreDuplicates: true });
-  if (error) return { ok: false, message: `Not imported: ${error.message}` };
-
-  updateTag(PRODUCTS_TAG);
-  return { ok: true, message: `Added ${demoProducts.length} sample products. Edit or delete them any time.` };
 }
