@@ -3,19 +3,40 @@
 import { revalidatePath, updateTag } from "next/cache";
 import { cookies } from "next/headers";
 import { isPreviewMode, PREVIEW_REGULAR_WITH_FINANCE, PREVIEW_ROLE_COOKIE, refusalMessage, requireAdmin } from "@/lib/auth/admin";
-import { canManage, isAdminRole, isGrantablePermission, roleLabels, type AdminRole } from "@/lib/auth/roles";
+import { defaultSettings } from "@/config/site";
+import { diffFields } from "@/lib/admin-log/changes";
+import { canManage, grantLabels, isAdminRole, isGrantablePermission, roleLabels, type AdminRole } from "@/lib/auth/roles";
 import { createSessionSupabaseClient } from "@/lib/supabase/server";
 import { createServiceSupabaseClient, isTeamManagementConfigured } from "@/lib/supabase/service";
 import {
+  mergeSettings,
   readSettingsForm,
   validateSettings,
   type SettingsFormErrors,
   type SettingsFormValues,
 } from "@/lib/validation/settings";
 import { passwordProblems } from "@/lib/validation/password";
+import { logAdminActivity } from "@/services/admin-log";
 import { SETTINGS_TAG } from "@/services/settings";
+import type { BusinessSettings } from "@/types/settings";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; message: string };
+
+/** Business settings shown in the Activity log when they change. */
+const settingsFieldLabels: Record<keyof BusinessSettings, string> = {
+  whatsapp: "WhatsApp number",
+  phone: "Phone",
+  email: "Email",
+  address: "Address",
+  facebook: "Facebook",
+  ecocashNumber: "EcoCash number",
+  ecocashFee: "EcoCash fee",
+  deliveryDays: "Delivery days",
+  hours: "Opening hours",
+};
+
+const grantList = (grants: readonly string[]) =>
+  grants.filter(isGrantablePermission).map((grant) => grantLabels[grant].label);
 
 const TEAM_SETUP_MESSAGE =
   "Adding and removing admins needs the server key SUPABASE_SERVICE_ROLE_KEY. See supabase/README.md.";
@@ -87,6 +108,10 @@ export async function addAdmin(_prev: AddAdminState, formData: FormData): Promis
     await service.auth.admin.deleteUser(created.user.id);
     return { status: "error", message: `Not added: ${insertError.message}`, errors: {}, values };
   }
+  await logAdminActivity(auth.admin, {
+    area: "team",
+    summary: `Added ${values.name} (${values.email}) as a ${roleLabels[role].toLowerCase()}`,
+  });
 
   revalidatePath("/admin/team");
   return {
@@ -103,12 +128,25 @@ async function manageable(userId: string) {
   if (!isTeamManagementConfigured) return { error: TEAM_SETUP_MESSAGE } as const;
 
   const service = createServiceSupabaseClient();
-  const { data: target } = await service.from("admin_users").select("role, name").eq("user_id", userId).maybeSingle();
+  const { data: target } = await service
+    .from("admin_users")
+    .select("role, name, email, permissions")
+    .eq("user_id", userId)
+    .maybeSingle();
   if (!target || !isAdminRole(target.role)) return { error: "That admin no longer exists." } as const;
   if (!canManage(auth.admin.role, target.role)) {
     return { error: `Your role can't change a ${roleLabels[target.role].toLowerCase()}.` } as const;
   }
-  return { actor: auth.admin, target: { role: target.role as AdminRole, name: target.name as string | null }, service } as const;
+  return {
+    actor: auth.admin,
+    target: {
+      role: target.role as AdminRole,
+      name: target.name as string | null,
+      email: target.email as string | null,
+      grants: Array.isArray(target.permissions) ? (target.permissions as string[]) : [],
+    },
+    service,
+  } as const;
 }
 
 export async function changeAdminRole(userId: string, newRole: string): Promise<ActionResult> {
@@ -121,6 +159,17 @@ export async function changeAdminRole(userId: string, newRole: string): Promise<
 
   const { error } = await result.service.from("admin_users").update({ role: newRole, permissions: [] }).eq("user_id", userId);
   if (error) return { ok: false, message: `Not changed: ${error.message}` };
+  if (newRole !== result.target.role) {
+    const lostGrants = grantList(result.target.grants);
+    await logAdminActivity(result.actor, {
+      area: "team",
+      summary: `Changed the role of ${result.target.name ?? result.target.email ?? "an admin"}`,
+      changes: [
+        { field: "Role", from: roleLabels[result.target.role], to: roleLabels[newRole] },
+        ...(lostGrants.length ? [{ field: "Extra access", from: lostGrants.join(", "), to: null }] : []),
+      ],
+    });
+  }
   revalidatePath("/admin/team");
   return { ok: true, message: `${result.target.name ?? "They"} is now a ${roleLabels[newRole].toLowerCase()}.` };
 }
@@ -135,6 +184,14 @@ export async function setAdminGrants(userId: string, grants: string[]): Promise<
   const permissions = [...new Set(grants.filter(isGrantablePermission))];
   const { error } = await result.service.from("admin_users").update({ permissions }).eq("user_id", userId);
   if (error) return { ok: false, message: `Not changed: ${error.message}` };
+  const changes = diffFields({ grants: grantList(result.target.grants) }, { grants: grantList(permissions) }, { grants: "Extra access" });
+  if (changes.length > 0) {
+    await logAdminActivity(result.actor, {
+      area: "team",
+      summary: `Changed the access of ${result.target.name ?? result.target.email ?? "an admin"}`,
+      changes,
+    });
+  }
   revalidatePath("/admin/team");
   return { ok: true, message: "Access updated." };
 }
@@ -162,6 +219,10 @@ export async function resetAdminPassword(userId: string, password: string): Prom
     app_metadata: { must_change_password: true },
   });
   if (error) return { ok: false, message: `Not changed: ${error.message}` };
+  await logAdminActivity(auth.admin, {
+    area: "team",
+    summary: `Set a new temporary password for ${target.name ?? "an admin"}`,
+  });
   return {
     ok: true,
     message: `New temporary password set for ${target.name ?? "this admin"}. Share it with them privately — they'll choose their own when they sign in.`,
@@ -175,6 +236,11 @@ export async function removeAdmin(userId: string): Promise<ActionResult> {
 
   const { error } = await result.service.auth.admin.deleteUser(userId);
   if (error) return { ok: false, message: `Not removed: ${error.message}` };
+  const who = result.target.name ?? result.target.email ?? "an admin";
+  await logAdminActivity(result.actor, {
+    area: "team",
+    summary: `Removed ${who} (${roleLabels[result.target.role].toLowerCase()})`,
+  });
   revalidatePath("/admin/team");
   return { ok: true, message: `${result.target.name ?? "The admin"} was removed.` };
 }
@@ -198,10 +264,16 @@ export async function saveSettings(_prev: SettingsFormState, formData: FormData)
   if (!auth.ok) return { status: "refused", message: refusalMessage(auth.reason), values };
 
   const supabase = await createSessionSupabaseClient();
+  const { data: saved } = await supabase.from("site_settings").select("data").eq("id", 1).maybeSingle();
+  const before = mergeSettings(defaultSettings, saved?.data as Partial<BusinessSettings> | undefined);
   const { error } = await supabase
     .from("site_settings")
     .upsert({ id: 1, data: settings, updated_by: auth.admin.userId });
   if (error) return { status: "refused", message: `Not saved: ${error.message}`, values };
+  const changes = diffFields({ ...before }, { ...settings }, settingsFieldLabels);
+  if (changes.length > 0) {
+    await logAdminActivity(auth.admin, { area: "settings", summary: "Edited the business settings", changes });
+  }
 
   updateTag(SETTINGS_TAG);
   return { status: "saved", message: "Saved. The website now shows these details.", values };

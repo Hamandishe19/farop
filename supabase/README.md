@@ -93,6 +93,14 @@ Nobody can change or remove their own account.
 - **Sold products leave the shop:** recording a sale as paid or awaiting
   payment deletes its catalogue products (and their photos) in the same step;
   the sale keeps each item's name, price, cost, category and condition.
+- **Activity log:** every change made in the admin area (products, finances,
+  team, business settings) is recorded in `admin_activity` with who made it,
+  when, and what changed. All admins can read it on the **Activity log** page
+  and filter it by admin or area — except that the developer admin's changes
+  are visible only to the developer, and finance changes only to admins with
+  finance access. The database fills in who made each change, and entries
+  can't be edited or deleted. Already set up before this was added? Run
+  `schema.sql` again to create it.
 - **Photos:** stored in the public `product-images` bucket (5 MB max, JPG / PNG
   / WebP / AVIF). Replacing or deleting a product's photo removes the old file.
 - **Changes appear on the website immediately** after saving.

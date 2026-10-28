@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, LayoutDashboard, Package, ReceiptText, Settings, Tags, TrendingUp, UserRound, Users, Wallet } from "lucide-react";
+import { Activity, History, LayoutDashboard, Package, ReceiptText, Settings, Tags, TrendingUp, UserRound, Users, Wallet } from "lucide-react";
 import { can, type AdminRole, type Permission } from "@/lib/auth/roles";
 import { cn } from "@/lib/cn";
 
@@ -14,6 +14,7 @@ const links: Array<{ href: string; label: string; icon: typeof Package; permissi
   { href: "/admin/finance/sales", label: "Sales", icon: ReceiptText, permission: ["finance.view", "finance.edit"], group: "Finance" },
   { href: "/admin/finance/expenses", label: "Expenses", icon: Wallet, permission: ["finance.view", "finance.edit"], group: "Finance" },
   { href: "/admin/team", label: "Team", icon: Users, permission: "team.view" },
+  { href: "/admin/activity", label: "Activity log", icon: History },
   { href: "/admin/settings", label: "Settings", icon: Settings, permission: "settings.view" },
   { href: "/admin/system", label: "System health", icon: Activity, permission: "system.view" },
   { href: "/admin/account", label: "My account", icon: UserRound },

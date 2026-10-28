@@ -16,8 +16,30 @@ import {
   type ProductFormValues,
 } from "@/lib/validation/product";
 import { parseMoney } from "@/lib/validation/finance";
-import { formToRow } from "@/services/product-rows";
+import { siteConfig } from "@/config/site";
+import { diffFields } from "@/lib/admin-log/changes";
+import { formatPrice } from "@/lib/format";
+import { logAdminActivity } from "@/services/admin-log";
+import { formToRow, PRODUCT_COLUMNS } from "@/services/product-rows";
 import { PRODUCTS_TAG } from "@/services/products";
+
+/** Product fields shown in the Activity log when they change. */
+const productFieldLabels: Record<string, string> = {
+  name: "Name",
+  short_description: "Short description",
+  description: "Description",
+  categories: "Categories",
+  type: "Type",
+  condition: "Condition",
+  price: "Price",
+  currency: "Currency",
+  sizes: "Sizes",
+  availability: "Availability",
+  image_url: "Photo",
+  image_alt: "Photo description",
+  active: "Visible on the website",
+  featured: "Featured",
+};
 
 /**
  * Admin mutations. Each one validates input, then checks on the server that
@@ -68,7 +90,7 @@ export async function saveProduct(_prev: ProductFormState, formData: FormData): 
   }
 
   const previous = id
-    ? (await supabase.from("products").select("image_url, slug").eq("id", id).maybeSingle()).data
+    ? (await supabase.from("products").select(PRODUCT_COLUMNS).eq("id", id).maybeSingle()).data
     : null;
   // The web address: kept as it is for an existing product (so shared links keep
   // working); made from the name for a new one, with -2, -3… if already taken.
@@ -90,13 +112,37 @@ export async function saveProduct(_prev: ProductFormState, formData: FormData): 
     return { status: "refused", message: `The product could not be saved: ${error.message}`, values };
   }
 
+  if (!previous) {
+    await logAdminActivity(auth.admin, {
+      area: "products",
+      summary: `Added product “${row.name}”${row.active ? "" : " (hidden)"}`,
+    });
+  } else {
+    // Numbers can come back from the database as text ("12.00"): compare them as numbers.
+    const before = { ...previous, price: previous.price === null ? null : Number(previous.price) };
+    const changes = diffFields(before, row, productFieldLabels, ["image_url"]);
+    if (changes.length > 0) {
+      await logAdminActivity(auth.admin, { area: "products", summary: `Edited product “${row.name}”`, changes });
+    }
+  }
+
   // Cost price lives in its own finance-only table; only saved by admins who may record finances.
   if (typeof costField === "string" && saved && allows(auth.admin, "finance.edit")) {
     const cost = parseMoney(costField);
     if (!Number.isNaN(cost)) {
-      await (costField.trim() === ""
+      const { data: oldCost } = await supabase.from("product_costs").select("cost_price").eq("product_id", saved.id).maybeSingle();
+      const { error: costError } = await (costField.trim() === ""
         ? supabase.from("product_costs").delete().eq("product_id", saved.id)
         : supabase.from("product_costs").upsert({ product_id: saved.id, cost_price: cost, updated_by: auth.admin.userId }));
+      const from = oldCost ? Number(oldCost.cost_price) : null;
+      const to = costField.trim() === "" ? null : cost;
+      if (!costError && from !== to) {
+        await logAdminActivity(auth.admin, {
+          area: "finance",
+          summary: to === null ? `Cleared the cost price of “${row.name}”` : `Set the cost price of “${row.name}” to ${formatPrice(to, siteConfig.currency)}`,
+          changes: [{ field: "Cost price", from: from === null ? null : formatPrice(from, siteConfig.currency), to: to === null ? null : formatPrice(to, siteConfig.currency) }],
+        });
+      }
     }
   }
 
@@ -115,8 +161,15 @@ export async function setProductActive(productId: string, active: boolean): Prom
   if (!auth.ok) return { ok: false, message: refusalMessage(auth.reason) };
 
   const supabase = await createSessionSupabaseClient();
-  const { error } = await supabase.from("products").update({ active }).eq("id", productId);
+  const { data, error } = await supabase.from("products").update({ active }).eq("id", productId).select("name");
   if (error) return { ok: false, message: `Not saved: ${error.message}` };
+  if (data?.[0]) {
+    const name = data[0].name as string;
+    await logAdminActivity(auth.admin, {
+      area: "products",
+      summary: active ? `Made “${name}” visible on the website` : `Hid “${name}” from the website`,
+    });
+  }
 
   updateTag(PRODUCTS_TAG);
   return { ok: true, message: active ? "Now visible on the website." : "Hidden from the website." };
@@ -127,9 +180,10 @@ export async function deleteProduct(productId: string): Promise<AdminActionResul
   if (!auth.ok) return { ok: false, message: refusalMessage(auth.reason) };
 
   const supabase = await createSessionSupabaseClient();
-  const { data, error } = await supabase.from("products").delete().eq("id", productId).select("image_url");
+  const { data, error } = await supabase.from("products").delete().eq("id", productId).select("image_url, name");
   if (error) return { ok: false, message: `Not deleted: ${error.message}` };
   if (!data?.length) return { ok: false, message: "That product no longer exists." };
+  await logAdminActivity(auth.admin, { area: "products", summary: `Deleted product “${data[0].name}”` });
 
   const path = storagePath(data[0].image_url);
   if (path) await supabase.storage.from(PRODUCT_IMAGES_BUCKET).remove([path]);

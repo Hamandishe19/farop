@@ -17,10 +17,23 @@ import {
   type SaleFormErrors,
   type SaleFormValues,
 } from "@/lib/validation/finance";
+import { paymentMethodLabels } from "@/config/payments";
+import { siteConfig } from "@/config/site";
+import { diffFields } from "@/lib/admin-log/changes";
+import { saleTotals } from "@/lib/finance/analytics";
+import { formatPrice } from "@/lib/format";
+import { logAdminActivity } from "@/services/admin-log";
 import { listAdminProducts } from "@/services/admin-products";
-import { listExpenseCategories } from "@/services/finance";
+import { getSale, listExpenseCategories } from "@/services/finance";
 import { PRODUCTS_TAG } from "@/services/products";
-import { CUSTOM_CATEGORY_PREFIX, SALE_STATUSES, type SaleStatus } from "@/types/finance";
+import {
+  CUSTOM_CATEGORY_PREFIX,
+  expenseCategoryLabel,
+  SALE_STATUSES,
+  saleStatusLabels,
+  type Sale,
+  type SaleStatus,
+} from "@/types/finance";
 
 /**
  * Recording sales, expenses and cost prices. Every action needs the
@@ -32,6 +45,48 @@ import { CUSTOM_CATEGORY_PREFIX, SALE_STATUSES, type SaleStatus } from "@/types/
 export type ActionResult = { ok: true; message: string } | { ok: false; message: string };
 
 const refresh = () => revalidatePath("/admin/finance", "layout");
+
+const money = (value: number) => formatPrice(value, siteConfig.currency);
+
+const logDate = (date: string) =>
+  new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(
+    new Date(`${date}T00:00:00Z`),
+  );
+
+/** "the sale on 3 Oct 2026 to Rudo", for Activity log summaries. */
+const describeSale = (sale: { soldOn: string; customerName?: string | null }) =>
+  `the sale on ${logDate(sale.soldOn)}${sale.customerName ? ` to ${sale.customerName}` : ""}`;
+
+/** Sale fields shown in the Activity log when an edit changes them. */
+const saleFieldLabels: Record<string, string> = {
+  soldOn: "Date",
+  customer: "Customer",
+  phone: "Phone",
+  payment: "Payment",
+  status: "Status",
+  items: "Items",
+  deliveryFee: "Delivery fee",
+  paymentFee: "EcoCash fee",
+  discount: "Discount",
+  notes: "Notes",
+  total: "Total",
+};
+
+function saleLogFields(sale: Omit<Sale, "id" | "createdAt">): Record<string, unknown> {
+  return {
+    soldOn: logDate(sale.soldOn),
+    customer: sale.customerName,
+    phone: sale.customerPhone,
+    payment: paymentMethodLabels[sale.paymentMethod],
+    status: saleStatusLabels[sale.status],
+    items: sale.items.map((item) => `${item.quantity} × ${item.name} at ${money(item.unitPrice)}`),
+    deliveryFee: money(sale.deliveryFee),
+    paymentFee: money(sale.paymentFee),
+    discount: money(sale.discount),
+    notes: sale.notes,
+    total: money(saleTotals(sale).total),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Sales
@@ -55,6 +110,7 @@ export async function saveSale(_prev: SaleFormState, formData: FormData): Promis
   // products are removed from the shop below, and the reports still need them.
   const catalogue = new Map((await listAdminProducts()).map((product) => [product.id, product]));
   const soldProducts = sale.items.map((item) => (item.productId ? catalogue.get(item.productId) : undefined)).filter(Boolean);
+  const previous = id ? await getSale(id).catch(() => undefined) : undefined;
 
   // One database function saves the sale and its items together and, unless the
   // sale is cancelled, removes the sold products from the catalogue — all or nothing.
@@ -92,8 +148,23 @@ export async function saveSale(_prev: SaleFormState, formData: FormData): Promis
     updateTag(PRODUCTS_TAG);
   }
 
-  refresh();
   const removed = sale.status === "cancelled" ? 0 : soldProducts.length;
+  const removedNote = removed ? ` — ${removed === 1 ? "1 product" : `${removed} products`} removed from the shop` : "";
+  if (previous) {
+    await logAdminActivity(auth.admin, {
+      area: "finance",
+      summary: `Edited ${describeSale(sale)}${removedNote}`,
+      changes: diffFields(saleLogFields(previous), saleLogFields(sale), saleFieldLabels),
+    });
+  } else {
+    const units = saleTotals(sale).units;
+    await logAdminActivity(auth.admin, {
+      area: "finance",
+      summary: `Recorded a sale of ${money(saleTotals(sale).total)}${sale.customerName ? ` to ${sale.customerName}` : ""} (${units === 1 ? "1 item" : `${units} items`}) — ${saleStatusLabels[sale.status].toLowerCase()}${removedNote}`,
+    });
+  }
+
+  refresh();
   redirect(`/admin/finance/sales?saved=${id ? "updated" : "added"}${removed ? `&removed=${removed}` : ""}`);
 }
 
@@ -102,8 +173,23 @@ export async function setSaleStatus(saleId: string, status: string): Promise<Act
   const auth = await requireAdmin("finance.edit");
   if (!auth.ok) return { ok: false, message: refusalMessage(auth.reason) };
   const supabase = await createSessionSupabaseClient();
+  const { data: before } = await supabase.from("sales").select("sold_on, customer_name, status").eq("id", saleId).maybeSingle();
   const { error } = await supabase.from("sales").update({ status }).eq("id", saleId);
   if (error) return { ok: false, message: `Not changed: ${error.message}` };
+  if (before && before.status !== status) {
+    const sale = { soldOn: before.sold_on as string, customerName: before.customer_name as string | null };
+    await logAdminActivity(auth.admin, {
+      area: "finance",
+      summary: `Changed the status of ${describeSale(sale)}`,
+      changes: [
+        {
+          field: "Status",
+          from: saleStatusLabels[before.status as SaleStatus] ?? null,
+          to: saleStatusLabels[status as SaleStatus],
+        },
+      ],
+    });
+  }
 
   // A sale that is now paid or awaiting payment takes its products out of the shop
   // (e.g. a cancelled sale switched back). Nothing happens for products already removed.
@@ -129,9 +215,13 @@ export async function deleteSale(saleId: string): Promise<ActionResult> {
   const auth = await requireAdmin("finance.edit");
   if (!auth.ok) return { ok: false, message: refusalMessage(auth.reason) };
   const supabase = await createSessionSupabaseClient();
-  const { data, error } = await supabase.from("sales").delete().eq("id", saleId).select("id");
+  const { data, error } = await supabase.from("sales").delete().eq("id", saleId).select("id, sold_on, customer_name");
   if (error) return { ok: false, message: `Not deleted: ${error.message}` };
   if (!data?.length) return { ok: false, message: "That sale no longer exists." };
+  await logAdminActivity(auth.admin, {
+    area: "finance",
+    summary: `Deleted ${describeSale({ soldOn: data[0].sold_on as string, customerName: data[0].customer_name as string | null })}`,
+  });
   refresh();
   return { ok: true, message: "Sale deleted." };
 }
@@ -167,6 +257,11 @@ export async function saveExpense(_prev: ExpenseFormState, formData: FormData): 
     created_by: auth.admin.userId,
   });
   if (error) return { status: "refused", message: `Not saved: ${error.message}`, values };
+  await logAdminActivity(auth.admin, {
+    area: "finance",
+    summary: `Recorded an expense of ${money(expense.amount)} (${expenseCategoryLabel(expense.category, categories)}) on ${logDate(expense.spentOn)}`,
+    changes: expense.description ? [{ field: "Description", from: null, to: expense.description }] : [],
+  });
   refresh();
   return { status: "saved", message: "Expense recorded." };
 }
@@ -175,9 +270,19 @@ export async function deleteExpense(expenseId: string): Promise<ActionResult> {
   const auth = await requireAdmin("finance.edit");
   if (!auth.ok) return { ok: false, message: refusalMessage(auth.reason) };
   const supabase = await createSessionSupabaseClient();
-  const { data, error } = await supabase.from("expenses").delete().eq("id", expenseId).select("id");
+  const { data, error } = await supabase
+    .from("expenses")
+    .delete()
+    .eq("id", expenseId)
+    .select("id, amount, category, spent_on, description");
   if (error) return { ok: false, message: `Not deleted: ${error.message}` };
   if (!data?.length) return { ok: false, message: "That expense no longer exists." };
+  const deleted = data[0];
+  await logAdminActivity(auth.admin, {
+    area: "finance",
+    summary: `Deleted an expense of ${money(Number(deleted.amount))} (${expenseCategoryLabel(deleted.category, await listExpenseCategories())}) from ${logDate(deleted.spent_on as string)}`,
+    changes: deleted.description ? [{ field: "Description", from: deleted.description as string, to: null }] : [],
+  });
   refresh();
   return { ok: true, message: "Expense deleted." };
 }
@@ -212,6 +317,7 @@ export async function addExpenseCategory(_prev: CategoryFormState, formData: For
       name: rawName,
     };
   }
+  await logAdminActivity(auth.admin, { area: "finance", summary: `Added the expense category “${result.name}”` });
   refresh();
   return { status: "added", message: `“${result.name}” added. You can now choose it for expenses.` };
 }
@@ -234,8 +340,9 @@ export async function deleteExpenseCategory(key: string): Promise<ActionResult> 
       message: `Not deleted: ${count === 1 ? "1 expense uses" : `${count} expenses use`} this category. It stays so your history adds up.`,
     };
   }
-  const { error } = await supabase.from("expense_categories").delete().eq("key", key);
+  const { data, error } = await supabase.from("expense_categories").delete().eq("key", key).select("name");
   if (error) return { ok: false, message: `Not deleted: ${error.message}` };
+  if (data?.[0]) await logAdminActivity(auth.admin, { area: "finance", summary: `Deleted the expense category “${data[0].name}”` });
   refresh();
   return { ok: true, message: "Category deleted." };
 }
@@ -252,11 +359,25 @@ export async function saveCostPrice(productId: string, value: string): Promise<A
   if (!auth.ok) return { ok: false, message: refusalMessage(auth.reason) };
 
   const supabase = await createSessionSupabaseClient();
+  const [{ data: product }, { data: oldCost }] = await Promise.all([
+    supabase.from("products").select("name").eq("id", productId).maybeSingle(),
+    supabase.from("product_costs").select("cost_price").eq("product_id", productId).maybeSingle(),
+  ]);
   const { error } =
     value.trim() === ""
       ? await supabase.from("product_costs").delete().eq("product_id", productId)
       : await supabase.from("product_costs").upsert({ product_id: productId, cost_price: amount, updated_by: auth.admin.userId });
   if (error) return { ok: false, message: `Not saved: ${error.message}` };
+  const from = oldCost ? Number(oldCost.cost_price) : null;
+  const to = value.trim() === "" ? null : amount;
+  if (from !== to) {
+    const name = product?.name ? `“${product.name}”` : "a product";
+    await logAdminActivity(auth.admin, {
+      area: "finance",
+      summary: to === null ? `Cleared the cost price of ${name}` : `Set the cost price of ${name} to ${money(to)}`,
+      changes: [{ field: "Cost price", from: from === null ? null : money(from), to: to === null ? null : money(to) }],
+    });
+  }
   refresh();
   return { ok: true, message: value.trim() === "" ? "Cost price cleared." : "Cost price saved." };
 }

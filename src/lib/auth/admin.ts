@@ -2,6 +2,7 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { can, GRANTABLE_PERMISSIONS, isAdminRole, isGrantablePermission, type AdminRole, type Permission } from "@/lib/auth/roles";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createSessionSupabaseClient } from "@/lib/supabase/server";
@@ -79,6 +80,8 @@ export async function requireAdmin(permission?: Permission | Permission[]): Prom
  * development preview, returns a pretend admin with the previewed role.
  */
 export async function requireAdminPage(permission?: Permission | Permission[]): Promise<AdminSession> {
+  // The Supabase session check reads the current time (token expiry), so admin pages render per request.
+  await connection();
   let admin: AdminSession;
   if (!isSupabaseConfigured) {
     // Production without a database never reaches here (the proxy sends it to the login page).

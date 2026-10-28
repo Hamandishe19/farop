@@ -428,17 +428,97 @@ $$;
 
 
 -- -----------------------------------------------------------------------------
--- 7. Who may call the database functions directly
---    Signed-out visitors (anon) may not call the finance functions at all.
+-- 7. Admin activity log  (who changed what in the admin area)
+--    Every admin can read it, except: the developer's entries are visible only
+--    to the developer, and finance entries only to admins with finance access.
+--    Any admin can add an entry, but who made it is always filled in from the
+--    signed-in session. Entries can never be edited or deleted (no policies),
+--    and stay after an admin is removed (actor_id has no foreign key).
+-- -----------------------------------------------------------------------------
+create table if not exists public.admin_activity (
+  id         bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  actor_id   uuid not null,
+  actor_name text not null,
+  actor_role text not null check (actor_role in ('regular', 'supreme', 'developer')),
+  area       text not null check (area in ('products', 'finance', 'team', 'settings')),
+  summary    text not null check (char_length(summary) between 1 and 500),
+  changes    jsonb not null default '[]'::jsonb check (jsonb_typeof(changes) = 'array')
+);
+
+create index if not exists admin_activity_actor_idx on public.admin_activity (actor_id, id desc);
+create index if not exists admin_activity_area_idx on public.admin_activity (area, id desc);
+
+-- Fills in who made the change and when, so nobody can log as someone else.
+create or replace function public.stamp_admin_activity()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_admin public.admin_users;
+begin
+  select * into v_admin from public.admin_users where user_id = auth.uid();
+  if v_admin.user_id is null then
+    raise exception 'Not an admin';
+  end if;
+  new.actor_id   := v_admin.user_id;
+  new.actor_name := coalesce(nullif(trim(v_admin.name), ''), v_admin.email, 'Unknown admin');
+  new.actor_role := v_admin.role;
+  new.created_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists admin_activity_stamp on public.admin_activity;
+create trigger admin_activity_stamp
+  before insert on public.admin_activity
+  for each row execute function public.stamp_admin_activity();
+
+alter table public.admin_activity enable row level security;
+
+drop policy if exists "admins can read activity" on public.admin_activity;
+create policy "admins can read activity" on public.admin_activity
+  for select using (
+    public.is_admin()
+    and (actor_role <> 'developer' or public.admin_role() = 'developer')
+    and (area <> 'finance' or public.has_permission('finance.view') or public.has_permission('finance.edit'))
+  );
+
+drop policy if exists "admins can add activity" on public.admin_activity;
+create policy "admins can add activity" on public.admin_activity
+  for insert with check (public.is_admin());
+
+-- Admins who appear in the log (for the "made by" filter). Runs as the caller,
+-- so the read rule above decides which admins are listed.
+create or replace function public.admin_activity_actors()
+returns table (actor_id uuid, actor_name text, actor_role text)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select distinct on (a.actor_id) a.actor_id, a.actor_name, a.actor_role
+  from public.admin_activity a
+  order by a.actor_id, a.id desc;
+$$;
+
+
+-- -----------------------------------------------------------------------------
+-- 8. Who may call the database functions directly
+--    Signed-out visitors (anon) may not call the finance or log functions at all.
 -- -----------------------------------------------------------------------------
 revoke execute on function public.save_sale(uuid, jsonb, jsonb) from public, anon;
 revoke execute on function public.remove_sold_products(uuid) from public, anon;
+revoke execute on function public.admin_activity_actors() from public, anon;
 grant execute on function public.save_sale(uuid, jsonb, jsonb) to authenticated;
 grant execute on function public.remove_sold_products(uuid) to authenticated;
+grant execute on function public.admin_activity_actors() to authenticated;
 
 
 -- -----------------------------------------------------------------------------
--- 8. Your developer admin account  (uses the email and name at the top)
+-- 9. Your developer admin account  (uses the email and name at the top)
 -- -----------------------------------------------------------------------------
 do $$
 declare
